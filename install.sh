@@ -18,7 +18,7 @@ set -euo pipefail
 
 # ─── Defaults (override via env) ──────────────────────────────────────────
 APP="oidc-webpush"
-REPO_URL="${REPO_URL:-https://github.com/example/oidc-webpush.git}"
+REPO_URL="${REPO_URL:-https://github.com/lucasrainett/oidc-webpush.git}"
 BRANCH="${BRANCH:-main}"
 NODE_MAJOR="${NODE_MAJOR:-24}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/oidc-webpush}"
