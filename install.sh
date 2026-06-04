@@ -1,42 +1,35 @@
 #!/usr/bin/env bash
-# notify-app · one-line installer for Proxmox VE
+# oidc-webpush · one-line installer for generic Linux
 #
-#   bash -c "$(curl -fsSL https://forge.mgtd.net/lr/notify-app/raw/branch/main/install.sh)"
+#   bash -c "$(curl -fsSL https://example.com/install.sh)"
 #
-# Creates an unprivileged LXC, installs Node.js, clones the repo, builds the
-# TypeScript, generates VAPID keys, writes .env, and starts a systemd service.
+# Installs Node.js 24 LTS, pnpm, clones the repo, builds the TypeScript,
+# generates VAPID keys, writes .env, and starts a systemd service.
+#
+# For update mode, simply run the same command again. It will pull latest,
+# rebuild, run DB migrations, and restart.
 #
 # All settings can be overridden via env vars for non-interactive use:
-#   CTID, HOSTNAME, DISK_GB, RAM_MB, CORES, STORAGE, BRIDGE, VLAN, IPV4, GATEWAY,
 #   BASE_URL, OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET,
-#   SMTP_AUTH_USER, SMTP_AUTH_PASS, REPO_URL, BRANCH, NODE_MAJOR
+#   ADMIN_EMAILS, OLLAMA_URL, AI_FILTER_DEFAULT,
+#   REPO_URL, BRANCH, NODE_MAJOR, INSTALL_DIR
 
 set -euo pipefail
 
 # ─── Defaults (override via env) ──────────────────────────────────────────
-APP="notify"
-REPO_URL="${REPO_URL:-https://forge.mgtd.net/lr/notify-app.git}"
+APP="oidc-webpush"
+REPO_URL="${REPO_URL:-https://github.com/example/oidc-webpush.git}"
 BRANCH="${BRANCH:-main}"
-NODE_MAJOR="${NODE_MAJOR:-22}"
-
-CTID="${CTID:-}"
-HOSTNAME="${HOSTNAME:-notify}"
-DISK_GB="${DISK_GB:-4}"
-RAM_MB="${RAM_MB:-512}"
-CORES="${CORES:-1}"
-STORAGE="${STORAGE:-local-lvm}"
-BRIDGE="${BRIDGE:-vmbr0}"
-VLAN="${VLAN:-30}"            # Published VLAN per LR's network plan
-IPV4="${IPV4:-dhcp}"
-GATEWAY="${GATEWAY:-}"
-TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
+NODE_MAJOR="${NODE_MAJOR:-24}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/oidc-webpush}"
 
 BASE_URL="${BASE_URL:-}"
 OIDC_ISSUER="${OIDC_ISSUER:-}"
 OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}"
 OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}"
-SMTP_AUTH_USER="${SMTP_AUTH_USER:-}"
-SMTP_AUTH_PASS="${SMTP_AUTH_PASS:-}"
+ADMIN_EMAILS="${ADMIN_EMAILS:-}"
+OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
+AI_FILTER_DEFAULT="${AI_FILTER_DEFAULT:-true}"
 
 NONINTERACTIVE="${NONINTERACTIVE:-0}"
 
@@ -47,8 +40,8 @@ banner() {
   cat <<EOF
 
 ${YLW}  ┌──────────────────────────────────┐
-  │  ${NC}notify · install${YLW}                  │
-  │  ${DIM}email → push · sso · open src${NC}${YLW}    │
+  │  ${NC}oidc-webpush · install${YLW}          │
+  │  ${DIM}email → push · sso · open source${NC}${YLW}│
   └──────────────────────────────────┘${NC}
 
 EOF
@@ -69,131 +62,89 @@ ask_secret() {
 }
 
 # ─── Preflight ────────────────────────────────────────────────────────────
-[[ $EUID -eq 0 ]] || die "must run as root on the Proxmox host"
-command -v pveversion >/dev/null 2>&1 || die "not a Proxmox VE host"
-command -v pct >/dev/null 2>&1 || die "pct not found"
+[[ $EUID -eq 0 ]] || die "must run as root"
+command -v systemctl >/dev/null 2>&1 || die "systemd required"
 
 banner
 
-# ─── Gather config ────────────────────────────────────────────────────────
-[[ -z "$CTID" ]] && CTID=$(pvesh get /cluster/nextid)
-msg "container ID: $CTID"
-
-pvesm status -storage "$STORAGE" >/dev/null 2>&1 || die "storage '$STORAGE' not found"
-
-echo
-msg "container settings"
-HOSTNAME=$(ask "hostname" "$HOSTNAME")
-DISK_GB=$(ask "disk GB" "$DISK_GB")
-RAM_MB=$(ask "memory MB" "$RAM_MB")
-CORES=$(ask "cores" "$CORES")
-
-echo
-msg "network"
-BRIDGE=$(ask "bridge" "$BRIDGE")
-VLAN=$(ask "VLAN tag (blank for none)" "$VLAN")
-IPV4=$(ask "ipv4 (CIDR or 'dhcp')" "$IPV4")
-if [[ "$IPV4" != "dhcp" ]]; then
-  GATEWAY=$(ask "gateway" "$GATEWAY")
+# ─── Detect existing install ──────────────────────────────────────────────
+if [[ -f "$INSTALL_DIR/.env" ]]; then
+  msg "existing installation found at $INSTALL_DIR"
+  msg "entering update mode..."
+  cd "$INSTALL_DIR"
+  if ! git diff --quiet; then
+    warn "local changes detected; stashing before pull"
+    git stash
+  fi
+  git pull origin "$BRANCH"
+  msg "installing dependencies..."
+  pnpm install --frozen-lockfile
+  msg "building..."
+  pnpm run build
+  msg "running database migrations..."
+  node dist/db.js migrate || true
+  msg "restarting service..."
+  systemctl restart "$APP"
+  ok "updated successfully"
+  exit 0
 fi
 
-echo
-msg "application"
-BASE_URL=$(ask "public base URL" "${BASE_URL:-https://notify.mgtd.net}")
-OIDC_ISSUER=$(ask "authentik issuer URL" "${OIDC_ISSUER:-https://authentik.mgtd.net/application/o/notify/}")
-OIDC_CLIENT_ID=$(ask "OIDC client id" "$OIDC_CLIENT_ID")
-[[ -z "$OIDC_CLIENT_SECRET" ]] && OIDC_CLIENT_SECRET=$(ask_secret "OIDC client secret")
-[[ -z "$OIDC_CLIENT_SECRET" ]] && die "OIDC client secret is required"
-
-echo
-msg "SMTP ingress (optional auth, recommended if reachable from outside trusted networks)"
-SMTP_AUTH_USER=$(ask "SMTP auth user (blank = no auth)" "$SMTP_AUTH_USER")
-if [[ -n "$SMTP_AUTH_USER" && -z "$SMTP_AUTH_PASS" ]]; then
-  SMTP_AUTH_PASS=$(ask_secret "SMTP auth password")
-fi
-
-ROOT_PASS=$(openssl rand -base64 24)
-
-# ─── Template ─────────────────────────────────────────────────────────────
-msg "checking debian 12 template"
-TEMPLATE_FILE=$(pveam available --section system 2>/dev/null | awk '/debian-12-standard/{print $2}' | sort -V | tail -1)
-[[ -n "$TEMPLATE_FILE" ]] || die "no debian-12-standard template available"
-if ! pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE_FILE"; then
-  msg "downloading $TEMPLATE_FILE"
-  pveam download "$TEMPLATE_STORAGE" "$TEMPLATE_FILE"
-fi
-
-# ─── Create LXC ───────────────────────────────────────────────────────────
-msg "creating LXC $CTID ($HOSTNAME)"
-NET="name=eth0,bridge=$BRIDGE,firewall=1"
-[[ -n "$VLAN" ]] && NET="$NET,tag=$VLAN"
-if [[ "$IPV4" == "dhcp" ]]; then
-  NET="$NET,ip=dhcp"
+# ─── Install Node.js & pnpm ───────────────────────────────────────────────
+msg "installing Node.js $NODE_MAJOR LTS..."
+if command -v apt-get >/dev/null 2>&1; then
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
+  apt-get install -y nodejs python3 build-essential
+elif command -v dnf >/dev/null 2>&1; then
+  dnf module reset nodejs -y
+  dnf module enable "nodejs:$NODE_MAJOR" -y
+  dnf install -y nodejs gcc-c++ make python3
+elif command -v pacman >/dev/null 2>&1; then
+  pacman -S --noconfirm nodejs npm
 else
-  NET="$NET,ip=$IPV4"
-  [[ -n "$GATEWAY" ]] && NET="$NET,gw=$GATEWAY"
+  die "unsupported package manager; install Node $NODE_MAJOR manually"
 fi
 
-pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE_FILE" \
-  --hostname "$HOSTNAME" \
-  --cores "$CORES" \
-  --memory "$RAM_MB" \
-  --rootfs "$STORAGE:$DISK_GB" \
-  --net0 "$NET" \
-  --features "nesting=1" \
-  --unprivileged 1 \
-  --onboot 1 \
-  --password "$ROOT_PASS" \
-  --description "notify · self-hosted push notification service · $(date -I)" \
-  >/dev/null
+msg "installing pnpm..."
+curl -fsSL https://get.pnpm.io/install.sh | env PNPM_HOME=/usr/local/share/pnpm sh -
+export PATH="/usr/local/share/pnpm:$PATH"
 
-pct set "$CTID" --startup order=3
-ok "container created"
+# ─── Clone & build ────────────────────────────────────────────────────────
+msg "cloning repo..."
+git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+pnpm install --frozen-lockfile
+pnpm run build
 
-msg "starting container"
-pct start "$CTID"
+# ─── Gather config ────────────────────────────────────────────────────────
+echo
+msg "configuration"
+BASE_URL=$(ask "public base URL (e.g. https://notify.example.com)" "$BASE_URL")
+OIDC_ISSUER=$(ask "OIDC issuer URL" "$OIDC_ISSUER")
+OIDC_CLIENT_ID=$(ask "OIDC client id" "$OIDC_CLIENT_ID")
+OIDC_CLIENT_SECRET=$(ask_secret "OIDC client secret")
+ADMIN_EMAILS=$(ask "admin email(s), comma-separated" "$ADMIN_EMAILS")
+OLLAMA_URL=$(ask "Ollama URL (blank to skip AI)" "$OLLAMA_URL")
+if [[ -n "$OLLAMA_URL" ]]; then
+  AI_FILTER_DEFAULT=$(ask "enable AI filtering by default for new users? [Y/n]" "${AI_FILTER_DEFAULT:-Y}")
+fi
 
-msg "waiting for network"
-for i in {1..30}; do
-  if pct exec "$CTID" -- ping -c1 -W1 1.1.1.1 >/dev/null 2>&1; then break; fi
-  sleep 1
-done
-pct exec "$CTID" -- ping -c1 -W1 1.1.1.1 >/dev/null 2>&1 || die "container has no network"
-ok "network up"
-
-# ─── Provision inside container ───────────────────────────────────────────
-msg "installing dependencies (this takes a few minutes)"
-pct exec "$CTID" -- bash -euo pipefail <<EOSH
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg git build-essential python3 >/dev/null
-curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - >/dev/null 2>&1
-apt-get install -y -qq nodejs >/dev/null
-
-id notify >/dev/null 2>&1 || useradd --system --home /opt/notify --shell /usr/sbin/nologin notify
-mkdir -p /opt/notify
-chown notify:notify /opt/notify
-EOSH
-
-msg "cloning $REPO_URL ($BRANCH)"
-pct exec "$CTID" -- runuser -u notify -- git clone --depth 1 --branch "$BRANCH" "$REPO_URL" /opt/notify
-
-msg "installing npm deps & building"
-pct exec "$CTID" -- bash -c "cd /opt/notify && runuser -u notify -- npm ci --silent --no-audit --no-fund"
-pct exec "$CTID" -- bash -c "cd /opt/notify && runuser -u notify -- npm run build --silent"
-pct exec "$CTID" -- bash -c "mkdir -p /opt/notify/data && chown notify:notify /opt/notify/data"
+COOKIE_SECRET=$(openssl rand -hex 32)
 
 # ─── VAPID keys ───────────────────────────────────────────────────────────
-msg "generating VAPID keypair"
-VAPID_OUT=$(pct exec "$CTID" -- bash -c "cd /opt/notify && node -e \"const w=require('web-push');const k=w.generateVAPIDKeys();process.stdout.write(k.publicKey+'|'+k.privateKey)\"")
-VAPID_PUBLIC="${VAPID_OUT%|*}"
-VAPID_PRIVATE="${VAPID_OUT#*|}"
-COOKIE_SECRET=$(openssl rand -hex 32)
-DOMAIN=$(echo "$BASE_URL" | sed -E 's|^https?://||; s|/.*$||')
+msg "generating VAPID keys..."
+VAPID_OUT=$(node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log(k.publicKey+'\\n'+k.privateKey)")
+VAPID_PUBLIC=$(echo "$VAPID_OUT" | head -n1)
+VAPID_PRIVATE=$(echo "$VAPID_OUT" | tail -n1)
 
-# ─── .env ─────────────────────────────────────────────────────────────────
-msg "writing /opt/notify/.env"
-ENV_CONTENT="BASE_URL=$BASE_URL
+warn "=== SAVE THESE KEYS ==="
+warn "VAPID_PUBLIC=$VAPID_PUBLIC"
+warn "VAPID_PRIVATE=$VAPID_PRIVATE"
+warn "They have been written to $INSTALL_DIR/.env"
+warn "======================="
+
+# ─── Write .env ───────────────────────────────────────────────────────────
+cat > "$INSTALL_DIR/.env" <<EOF
+BASE_URL=$BASE_URL
 PORT=3000
 HOST=0.0.0.0
 SMTP_PORT=2525
@@ -203,88 +154,43 @@ OIDC_CLIENT_ID=$OIDC_CLIENT_ID
 OIDC_CLIENT_SECRET=$OIDC_CLIENT_SECRET
 VAPID_PUBLIC=$VAPID_PUBLIC
 VAPID_PRIVATE=$VAPID_PRIVATE
-VAPID_SUBJECT=mailto:admin@$DOMAIN
+VAPID_SUBJECT=mailto:admin@localhost
 COOKIE_SECRET=$COOKIE_SECRET
-DB_PATH=/opt/notify/data/notify.db"
-if [[ -n "$SMTP_AUTH_USER" ]]; then
-  ENV_CONTENT="$ENV_CONTENT
-SMTP_AUTH_USER=$SMTP_AUTH_USER
-SMTP_AUTH_PASS=$SMTP_AUTH_PASS"
-fi
-pct exec "$CTID" -- bash -c "umask 077; cat > /opt/notify/.env" <<< "$ENV_CONTENT"
-pct exec "$CTID" -- chown notify:notify /opt/notify/.env
+DB_PATH=./data/oidc-webpush.db
+ADMIN_EMAILS=$ADMIN_EMAILS
+OLLAMA_URL=$OLLAMA_URL
+OLLAMA_MODEL=llama3.2:3b
+OLLAMA_TIMEOUT_MS=5000
+OLLAMA_MAX_CONCURRENCY=2
+OLLAMA_QUEUE_TIMEOUT_MS=120000
+AI_BYPASS_PATTERNS=2fa|verification|otp|alert
+AI_SKIP_PATTERNS=password|reset|credit card
+AI_FILTER_DEFAULT=$AI_FILTER_DEFAULT
+LOG_LEVEL=info
+EOF
 
-# ─── systemd unit ─────────────────────────────────────────────────────────
-msg "installing systemd unit"
-pct exec "$CTID" -- bash -c 'cat > /etc/systemd/system/notify.service' <<'EOF'
+# ─── Create systemd unit ──────────────────────────────────────────────────
+cat > "/etc/systemd/system/${APP}.service" <<EOF
 [Unit]
-Description=notify-app (email-to-push notification service)
-Documentation=https://forge.mgtd.net/lr/notify-app
-After=network-online.target
-Wants=network-online.target
+Description=oidc-webpush
+After=network.target
 
 [Service]
 Type=simple
-User=notify
-Group=notify
-WorkingDirectory=/opt/notify
-EnvironmentFile=/opt/notify/.env
-ExecStart=/usr/bin/node /opt/notify/dist/app.js
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# hardening
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/opt/notify/data
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-LockPersonality=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
+User=root
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=/usr/local/share/pnpm/pnpm start
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-pct exec "$CTID" -- systemctl daemon-reload
-pct exec "$CTID" -- systemctl enable --now notify.service >/dev/null
+systemctl daemon-reload
+systemctl enable --now "$APP"
 
-sleep 3
-if pct exec "$CTID" -- systemctl is-active --quiet notify.service; then
-  ok "notify.service is running"
-else
-  warn "service did not start cleanly · pct exec $CTID -- journalctl -u notify -n 50"
-fi
-
-# ─── Summary ──────────────────────────────────────────────────────────────
-CT_IP=$(pct exec "$CTID" -- hostname -I | awk '{print $1}')
-
-cat <<EOF
-
-${GRN}✓ installation complete${NC}
-
-  ${DIM}container${NC}     CTID=$CTID   ip=$CT_IP   vlan=${VLAN:-none}
-  ${DIM}http${NC}          http://$CT_IP:3000
-  ${DIM}smtp${NC}          $CT_IP:2525
-  ${DIM}root pass${NC}     $ROOT_PASS  ${YLW}(save in Proton Pass)${NC}
-  ${DIM}cookie secret${NC} ${COOKIE_SECRET:0:8}…  ${YLW}(in .env — back up too)${NC}
-  ${DIM}VAPID public${NC}  ${VAPID_PUBLIC:0:32}…
-
-  ${BLU}next steps${NC}
-    1. Traefik route:  $BASE_URL → http://$CT_IP:3000  (forwardAuth optional)
-    2. Authentik OIDC client redirect URI:  $BASE_URL/auth/callback
-    3. Point your apps' SMTP settings at $CT_IP:2525 (or notify.mgtd.net:2525 via Traefik)
-    4. Sign in, then click "enable on this device"
-
-  ${BLU}operations${NC}
-    logs:   pct exec $CTID -- journalctl -u notify -f
-    shell:  pct enter $CTID
-    update: pct exec $CTID -- bash -c 'cd /opt/notify && git pull && npm ci && npm run build && systemctl restart notify'
-
-EOF
+ok "installed and running"
+msg "service status: systemctl status $APP"
+msg "logs: journalctl -u $APP -f"

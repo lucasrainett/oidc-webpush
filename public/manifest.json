@@ -1,7 +1,7 @@
 {
-  "name": "notify",
-  "short_name": "notify",
-  "description": "Self-hosted email-to-push notification gateway",
+  "name": "oidc-webpush",
+  "short_name": "oidc-webpush",
+  "description": "Self-hosted email-to-push notification gateway with OIDC SSO",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0e0f12",

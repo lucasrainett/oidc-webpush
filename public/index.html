@@ -4,19 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0e0f12">
-  <title>notify</title>
+  <title>oidc-webpush</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/style.css">
-  <script src="https://unpkg.com/[email protected]" defer></script>
   <script src="/client.js" defer></script>
 </head>
 <body>
   <header class="bar">
     <div class="brand">
       <span class="dot"></span>
-      <span class="brand-name">notify</span>
+      <span class="brand-name">oidc-webpush</span>
       <span class="brand-host" id="brand-host"></span>
     </div>
     <div class="bar-right">
@@ -26,28 +25,37 @@
   </header>
 
   <main>
+    <!-- Admin impersonation banner -->
+    <div id="impersonate-banner" class="impersonate-banner" style="display:none">
+      <span>Viewing as <span id="impersonate-name"></span></span>
+      <button class="ghost" id="stop-impersonate">return to admin view</button>
+    </div>
+
+    <!-- Admin user selector -->
+    <section class="card admin-only" id="admin-user-card" style="display:none">
+      <header class="card-h">
+        <h2>admin</h2>
+        <select id="impersonate-select" class="admin-select">
+          <option value="">view as user...</option>
+        </select>
+      </header>
+    </section>
+
     <section class="card">
       <header class="card-h">
         <h2>devices</h2>
         <button id="enable-btn" class="primary">enable on this device</button>
       </header>
-      <div id="devices" hx-get="/api/devices" hx-trigger="load" hx-swap="innerHTML">
-        <div class="empty">loading…</div>
-      </div>
+      <div id="devices"><div class="empty">loading…</div></div>
     </section>
 
     <section class="card">
       <header class="card-h">
         <h2>rules</h2>
-        <button class="ghost" onclick="document.getElementById('rule-form').classList.toggle('open')">+ add rule</button>
+        <button class="ghost" id="toggle-rule-form">+ add rule</button>
       </header>
 
-      <form id="rule-form"
-            class="rule-form"
-            hx-post="/api/rules"
-            hx-target="#rules"
-            hx-swap="innerHTML"
-            hx-on::after-request="if(event.detail.successful){this.reset();this.classList.remove('open')}">
+      <form id="rule-form" class="rule-form" style="display:none">
         <select name="match_field" required>
           <option value="subject">subject</option>
           <option value="from">from</option>
@@ -56,40 +64,62 @@
         <span class="op">~</span>
         <input name="match_pattern" placeholder="/regex/ or substring" required>
         <span class="op">→</span>
-        <select name="action" required onchange="document.getElementById('rule-value').style.display=this.value==='mute'?'none':''">
+        <select name="action" required id="rule-action">
           <option value="priority">priority</option>
           <option value="mute">mute</option>
           <option value="tag">tag</option>
         </select>
         <input id="rule-value" name="action_value" placeholder="value (e.g. 5)">
+        <select id="rule-app-name" name="app_name">
+          <option value="">app (optional)</option>
+        </select>
+        <label class="checkbox-label"><input type="checkbox" name="enabled" checked> enabled</label>
         <button type="submit" class="primary">save</button>
       </form>
 
-      <div id="rules" hx-get="/api/rules" hx-trigger="load" hx-swap="innerHTML">
-        <div class="empty">loading…</div>
-      </div>
+      <div id="rules"><div class="empty">loading…</div></div>
     </section>
 
     <section class="card">
       <header class="card-h">
         <h2>events</h2>
         <div class="card-actions">
-          <button class="ghost" hx-post="/api/test" hx-target="#toast" hx-swap="innerHTML">test push</button>
-          <button class="ghost" hx-get="/api/events" hx-target="#events" hx-swap="innerHTML">refresh</button>
+          <button class="ghost" id="test-push">test push</button>
+          <button class="ghost" id="refresh-events">refresh</button>
         </div>
       </header>
       <div id="toast" class="toast-slot"></div>
-      <div id="events"
-           hx-get="/api/events"
-           hx-trigger="load, every 15s"
-           hx-swap="innerHTML">
-        <div class="empty">loading…</div>
-      </div>
+      <div id="events"><div class="empty">loading…</div></div>
+    </section>
+
+    <!-- Admin: SMTP Credentials -->
+    <section class="card admin-only" id="admin-credentials-card" style="display:none">
+      <header class="card-h">
+        <h2>smtp credentials</h2>
+        <button class="ghost" id="toggle-cred-form">+ add credential</button>
+      </header>
+      <form id="cred-form" class="rule-form" style="display:none">
+        <select id="cred-user-select" required>
+          <option value="">select user...</option>
+        </select>
+        <input id="cred-name" placeholder="credential name (e.g. Proxmox)" required>
+        <button type="submit" class="primary">create</button>
+      </form>
+      <div id="credentials-list"><div class="empty">loading…</div></div>
+    </section>
+
+    <!-- Admin: Unmatched Events -->
+    <section class="card admin-only" id="admin-unmatched-card" style="display:none">
+      <header class="card-h">
+        <h2>unmatched events</h2>
+        <button class="ghost" id="refresh-unmatched">refresh</button>
+      </header>
+      <div id="unmatched-events"><div class="empty">loading…</div></div>
     </section>
   </main>
 
   <footer class="foot">
-    <span>self-hosted · web push via VAPID · sso via authentik</span>
+    <span>self-hosted · web push via VAPID · sso via OIDC</span>
   </footer>
 </body>
 </html>
