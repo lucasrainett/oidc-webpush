@@ -30,13 +30,13 @@
         if (nameEl) nameEl.textContent = impersonating.email;
       }
     }
+
+    const smtpEndpoint = document.getElementById('smtp-endpoint');
+    if (smtpEndpoint && me.smtp_endpoint) smtpEndpoint.textContent = me.smtp_endpoint;
   } catch (err) { console.error(err); }
 
   const brandHost = document.getElementById('brand-host');
   if (brandHost) brandHost.textContent = location.host;
-
-  const smtpEndpoint = document.getElementById('smtp-endpoint');
-  if (smtpEndpoint && me.smtp_endpoint) smtpEndpoint.textContent = me.smtp_endpoint;
 
   // ── Devices ───────────────────────────────────────────────────────────────
   async function loadDevices() {
