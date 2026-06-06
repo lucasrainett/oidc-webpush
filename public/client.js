@@ -378,21 +378,19 @@
   if (credForm) {
     credForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const userSubEl = document.getElementById('cred-user-select');
       const nameEl = document.getElementById('cred-name');
-      const userSub = userSubEl ? userSubEl.value : '';
       const name = nameEl ? nameEl.value.trim() : '';
-      if (!userSub || !name) return;
+      if (!name) return;
       try {
         const res = await fetch('/api/admin/credentials', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ user_sub: userSub, name }),
+          body: JSON.stringify({ name }),
         }).then(r => r.json());
         alert(`Credential created.\nUsername: ${res.id}\nPassword: ${res.password}\n\nCopy the password now — it will not be shown again.`);
         const form = e.target;
         if (form.reset) form.reset();
-        credForm.style.display = 'none';
+        credForm.classList.remove('open');
         loadAdminCredentials();
       } catch {
         alert('failed to create credential');

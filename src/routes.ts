@@ -315,14 +315,12 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post('/api/admin/credentials', async (req, reply) => {
     const u = (req as AuthedRequest).user;
     if (!u.is_admin) return reply.code(403).send({ error: 'forbidden' });
-    const body = req.body as { user_sub: string; name: string };
-    if (!body.user_sub || !body.name?.trim()) return reply.code(400).send({ error: 'bad body' });
-    const target = queries.userBySub.get(body.user_sub) as User | undefined;
-    if (!target) return reply.code(404).send({ error: 'user not found' });
+    const body = req.body as { name: string };
+    if (!body.name?.trim()) return reply.code(400).send({ error: 'bad body' });
     const id = 'cred_' + nanoid(12);
     const password = 'sk_' + nanoid(24);
     const hash = await argon2Hash(password);
-    queries.insertCredential.run(id, body.user_sub, body.name.trim(), hash, 1, Date.now());
+    queries.insertCredential.run(id, u.sub, body.name.trim(), hash, 1, Date.now());
     return { id, name: body.name.trim(), password };
   });
 
