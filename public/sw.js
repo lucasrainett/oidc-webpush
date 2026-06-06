@@ -28,7 +28,7 @@ self.addEventListener('push', (event) => {
     timestamp: data.ts || Date.now(),
     requireInteraction: priority >= 4,
     vibrate: priority >= 4 ? [200, 100, 200] : undefined,
-    data: { from: data.from, priority, url: data.from ? '/?mute_from=' + encodeURIComponent(data.from) : '/' },
+    data: { from: data.from, priority, url: data.from ? '/notification.html?from=' + encodeURIComponent(data.from) : '/' },
     actions: [
       { action: 'mute-type', title: 'Mute this' },
       { action: 'open', title: 'Open' },
