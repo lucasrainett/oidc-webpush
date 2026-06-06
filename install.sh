@@ -19,7 +19,7 @@ set -euo pipefail
 # ─── Defaults (override via env) ──────────────────────────────────────────
 APP="oidc-webpush"
 REPO_URL="${REPO_URL:-https://github.com/lucasrainett/oidc-webpush.git}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-master}"
 NODE_MAJOR="${NODE_MAJOR:-24}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/oidc-webpush}"
 
@@ -57,7 +57,7 @@ ask()   {
   else read -rp "  $1: " v; echo "$v"; fi
 }
 ask_secret() {
-  [[ "$NONINTERACTIVE" == "1" ]] && { echo ""; return; }
+  [[ "$NONINTERACTIVE" == "1" ]] && { echo "${2:-}"; return; }
   local v; read -rsp "  $1: " v; echo >&2; echo "$v"
 }
 
@@ -93,20 +93,20 @@ fi
 msg "installing Node.js $NODE_MAJOR LTS..."
 if command -v apt-get >/dev/null 2>&1; then
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
-  apt-get install -y nodejs python3 build-essential
+  apt-get install -y nodejs python3 build-essential git
 elif command -v dnf >/dev/null 2>&1; then
   dnf module reset nodejs -y
   dnf module enable "nodejs:$NODE_MAJOR" -y
-  dnf install -y nodejs gcc-c++ make python3
+  dnf install -y nodejs gcc-c++ make python3 git
 elif command -v pacman >/dev/null 2>&1; then
-  pacman -S --noconfirm nodejs npm
+  pacman -S --noconfirm nodejs npm git
 else
   die "unsupported package manager; install Node $NODE_MAJOR manually"
 fi
 
 msg "installing pnpm..."
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_HOME=/usr/local/share/pnpm sh -
-export PATH="/usr/local/share/pnpm:$PATH"
+export PATH="/usr/local/share/pnpm/bin:$PATH"
 
 # ─── Clone & build ────────────────────────────────────────────────────────
 msg "cloning repo..."
@@ -121,7 +121,7 @@ msg "configuration"
 BASE_URL=$(ask "public base URL (e.g. https://notify.example.com)" "$BASE_URL")
 OIDC_ISSUER=$(ask "OIDC issuer URL" "$OIDC_ISSUER")
 OIDC_CLIENT_ID=$(ask "OIDC client id" "$OIDC_CLIENT_ID")
-OIDC_CLIENT_SECRET=$(ask_secret "OIDC client secret")
+OIDC_CLIENT_SECRET=$(ask_secret "OIDC client secret" "$OIDC_CLIENT_SECRET")
 ADMIN_EMAILS=$(ask "admin email(s), comma-separated" "$ADMIN_EMAILS")
 OLLAMA_URL=$(ask "Ollama URL (blank to skip AI)" "$OLLAMA_URL")
 if [[ -n "$OLLAMA_URL" ]]; then
@@ -180,7 +180,7 @@ Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/.env
-ExecStart=/usr/local/share/pnpm/pnpm start
+ExecStart=/usr/local/share/pnpm/bin/pnpm start
 Restart=always
 RestartSec=10
 
