@@ -399,6 +399,20 @@
           loadAdminCredentials();
         });
       });
+      // also populate events filter dropdown with all credential names
+      const filterSelect = document.getElementById('events-cred-filter');
+      if (filterSelect) {
+        const existing = new Set(Array.from(filterSelect.options).map(o => o.value));
+        for (const c of creds) {
+          if (c.name && !existing.has(c.name)) {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            filterSelect.appendChild(opt);
+            existing.add(c.name);
+          }
+        }
+      }
     } catch (err) { console.error(err); }
   }
 
