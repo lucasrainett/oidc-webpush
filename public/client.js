@@ -35,6 +35,9 @@
   const brandHost = document.getElementById('brand-host');
   if (brandHost) brandHost.textContent = location.host;
 
+  const smtpEndpoint = document.getElementById('smtp-endpoint');
+  if (smtpEndpoint) smtpEndpoint.textContent = location.hostname + ':2525';
+
   // ── Devices ───────────────────────────────────────────────────────────────
   async function loadDevices() {
     try {
@@ -43,6 +46,10 @@
       if (!container) return;
       if (!devices.length) {
         container.innerHTML = '<div class="empty">no devices enrolled · click "enable on this device" below</div>';
+        if (enableBtn) {
+          enableBtn.disabled = false;
+          enableBtn.textContent = 'enable on this device';
+        }
         return;
       }
       container.innerHTML = devices.map(s => `
@@ -60,6 +67,10 @@
           loadDevices();
         });
       });
+      if (enableBtn) {
+        enableBtn.disabled = true;
+        enableBtn.textContent = 'push enabled on this account';
+      }
     } catch (err) { console.error(err); }
   }
   loadDevices();
@@ -72,13 +83,8 @@
     } else {
       (async () => {
         try {
-          const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
           await navigator.serviceWorker.ready;
-          const existing = await reg.pushManager.getSubscription();
-          if (existing) {
-            enableBtn.textContent = 'push enabled on this device';
-            enableBtn.disabled = true;
-          }
         } catch {
           enableBtn.disabled = true;
           enableBtn.textContent = 'service worker failed';
@@ -105,7 +111,7 @@
           });
           if (!res.ok) throw new Error('subscribe failed');
           loadDevices();
-          enableBtn.textContent = 'push enabled on this device';
+          enableBtn.textContent = 'push enabled on this account';
         } catch (err) {
           console.error(err);
           enableBtn.disabled = false;

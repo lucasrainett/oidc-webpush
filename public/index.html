@@ -98,6 +98,11 @@
         <h2>smtp credentials</h2>
         <button class="ghost" id="toggle-cred-form">+ add credential</button>
       </header>
+      <div class="row" style="background:var(--bg-row); border-bottom:1px solid var(--border);">
+        <span class="device-ua">smtp endpoint</span>
+        <code class="mono" id="smtp-endpoint"></code>
+        <span class="meta">auth required · no tls</span>
+      </div>
       <form id="cred-form" class="rule-form">
         <input id="cred-name" placeholder="credential name (e.g. Proxmox)" required>
         <button type="submit" class="primary">create</button>

@@ -13,7 +13,8 @@
     "dev": "tsx watch src/app.ts",
     "start": "node dist/app.js",
     "typecheck": "tsc --noEmit",
-    "gen-vapid": "node -e \"const w=require('web-push');const k=w.generateVAPIDKeys();console.log('VAPID_PUBLIC='+k.publicKey);console.log('VAPID_PRIVATE='+k.privateKey)\""
+    "gen-vapid": "node -e \"const w=require('web-push');const k=w.generateVAPIDKeys();console.log('VAPID_PUBLIC='+k.publicKey);console.log('VAPID_PRIVATE='+k.privateKey)\"",
+    "test-smtp": "node scripts/test-smtp.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -31,12 +31,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS subscriptions (
     id          TEXT PRIMARY KEY,
     user_sub    TEXT NOT NULL REFERENCES users(sub) ON DELETE CASCADE,
-    endpoint    TEXT NOT NULL UNIQUE,
+    endpoint    TEXT NOT NULL,
     p256dh      TEXT NOT NULL,
     auth        TEXT NOT NULL,
     user_agent  TEXT,
     created_at  INTEGER NOT NULL,
-    last_seen   INTEGER NOT NULL
+    last_seen   INTEGER NOT NULL,
+    UNIQUE(user_sub, endpoint)
   );
 
   CREATE TABLE IF NOT EXISTS rules (
@@ -101,8 +102,32 @@ db.exec(`
 // ── Migration bootstrap ─────────────────────────────────────────────────────
 
 const currentVersion = db.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number | null };
-if (!currentVersion?.v) {
+const version = currentVersion?.v ?? 0;
+
+if (version < 1) {
   db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(1, Date.now());
+}
+
+if (version < 2) {
+  // Migrate subscriptions: drop old UNIQUE(endpoint), add UNIQUE(user_sub, endpoint)
+  db.exec(`
+    CREATE TABLE subscriptions_new (
+      id          TEXT PRIMARY KEY,
+      user_sub    TEXT NOT NULL REFERENCES users(sub) ON DELETE CASCADE,
+      endpoint    TEXT NOT NULL,
+      p256dh      TEXT NOT NULL,
+      auth        TEXT NOT NULL,
+      user_agent  TEXT,
+      created_at  INTEGER NOT NULL,
+      last_seen   INTEGER NOT NULL,
+      UNIQUE(user_sub, endpoint)
+    );
+    INSERT INTO subscriptions_new SELECT * FROM subscriptions;
+    DROP TABLE subscriptions;
+    ALTER TABLE subscriptions_new RENAME TO subscriptions;
+    CREATE INDEX idx_subs_user ON subscriptions(user_sub);
+  `);
+  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(2, Date.now());
 }
 
 // ── Prepared Statements ───────────────────────────────────────────────────
@@ -125,13 +150,13 @@ export const queries = {
   upsertSub: db.prepare(`
     INSERT INTO subscriptions (id, user_sub, endpoint, p256dh, auth, user_agent, created_at, last_seen)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(endpoint) DO UPDATE SET
+    ON CONFLICT(user_sub, endpoint) DO UPDATE SET
       last_seen = excluded.last_seen,
       user_agent = excluded.user_agent
   `),
   listSubs: db.prepare('SELECT * FROM subscriptions WHERE user_sub = ? ORDER BY created_at DESC'),
   delSub: db.prepare('DELETE FROM subscriptions WHERE id = ? AND user_sub = ?'),
-  delSubByEndpoint: db.prepare('DELETE FROM subscriptions WHERE endpoint = ?'),
+  delSubByEndpoint: db.prepare('DELETE FROM subscriptions WHERE endpoint = ? AND user_sub = ?'),
 
   // Rules
   insertRule: db.prepare(`

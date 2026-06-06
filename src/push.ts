@@ -2,7 +2,7 @@
 
 import webpush from 'web-push';
 import { config } from './config.js';
-import { db, queries } from './db.js';
+import { queries } from './db.js';
 import type { Subscription } from './types.js';
 
 if (!config.vapid.public || !config.vapid.private) {
@@ -29,7 +29,7 @@ export async function sendPush(
     return { ok: true };
   } catch (err: any) {
     if (err.statusCode === 404 || err.statusCode === 410) {
-      queries.delSubByEndpoint.run(sub.endpoint);
+      queries.delSubByEndpoint.run(sub.endpoint, sub.user_sub);
     }
     return { ok: false, statusCode: err.statusCode };
   }
