@@ -13,7 +13,9 @@
     isAdmin = me.is_admin;
     impersonating = me.impersonating;
     if (isAdmin) {
-      document.querySelectorAll('.admin-only').forEach(el => (el as HTMLElement).style.display = '');
+      document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = '';
+      });
       loadUsersForImpersonation();
       loadAdminCredentials();
       loadUnmatchedEvents();
@@ -22,23 +24,26 @@
       const banner = document.getElementById('impersonate-banner');
       if (banner) {
         banner.style.display = '';
-        document.getElementById('impersonate-name')!.textContent = impersonating.email;
+        const nameEl = document.getElementById('impersonate-name');
+        if (nameEl) nameEl.textContent = impersonating.email;
       }
     }
   } catch (err) { console.error(err); }
 
-  document.getElementById('brand-host')!.textContent = location.host;
+  const brandHost = document.getElementById('brand-host');
+  if (brandHost) brandHost.textContent = location.host;
 
   // ── Devices ───────────────────────────────────────────────────────────────
   async function loadDevices() {
     try {
       const devices = await fetch('/api/devices').then(r => r.json());
-      const container = document.getElementById('devices')!;
+      const container = document.getElementById('devices');
+      if (!container) return;
       if (!devices.length) {
         container.innerHTML = '<div class="empty">no devices enrolled · click "enable on this device" below</div>';
         return;
       }
-      container.innerHTML = devices.map((s: any) => `
+      container.innerHTML = devices.map(s => `
         <div class="row">
           <span class="device-ua">${esc(s.user_agent ?? 'unknown')}</span>
           <span class="meta">${relTime(s.last_seen)}</span>
@@ -46,7 +51,9 @@
         </div>`).join('');
       container.querySelectorAll('[data-del-device]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          const id = (e.target as HTMLElement).dataset.delDevice!;
+          const target = e.target;
+          const id = target.dataset.delDevice;
+          if (!id) return;
           await fetch(`/api/devices/${id}`, { method: 'DELETE' });
           loadDevices();
         });
@@ -55,7 +62,7 @@
   }
   loadDevices();
 
-  const enableBtn = document.getElementById('enable-btn') as HTMLButtonElement;
+  const enableBtn = document.getElementById('enable-btn');
   if (enableBtn) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       enableBtn.disabled = true;
@@ -97,11 +104,11 @@
           if (!res.ok) throw new Error('subscribe failed');
           loadDevices();
           enableBtn.textContent = 'push enabled on this device';
-        } catch (err: any) {
+        } catch (err) {
           console.error(err);
           enableBtn.disabled = false;
           enableBtn.textContent = 'enable on this device';
-          alert('could not enable push: ' + err.message);
+          alert('could not enable push: ' + (err.message || String(err)));
         }
       });
     }
@@ -111,12 +118,13 @@
   async function loadRules() {
     try {
       const rules = await fetch('/api/rules').then(r => r.json());
-      const container = document.getElementById('rules')!;
+      const container = document.getElementById('rules');
+      if (!container) return;
       if (!rules.length) {
         container.innerHTML = '<div class="empty">no rules · all emails pass through with default priority</div>';
         return;
       }
-      container.innerHTML = rules.map((r: any) => {
+      container.innerHTML = rules.map(r => {
         const av = r.action_value ? ` <span class="action-value">${esc(r.action_value)}</span>` : '';
         const app = r.app_name ? ` <span class="action-value">[${esc(r.app_name)}]</span>` : '';
         const status = r.enabled ? '' : ' <span class="action-value">(disabled)</span>';
@@ -129,15 +137,19 @@
 
       container.querySelectorAll('[data-del-rule]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          const id = (e.target as HTMLElement).dataset.delRule!;
+          const target = e.target;
+          const id = target.dataset.delRule;
+          if (!id) return;
           await fetch(`/api/rules/${id}`, { method: 'DELETE' });
           loadRules();
         });
       });
       container.querySelectorAll('[data-toggle-rule]').forEach(cb => {
         cb.addEventListener('change', async (e) => {
-          const id = (e.target as HTMLInputElement).dataset.toggleRule!;
-          const enabled = (e.target as HTMLInputElement).checked;
+          const target = e.target;
+          const id = target.dataset.toggleRule;
+          const enabled = target.checked;
+          if (!id) return;
           await fetch(`/api/rules/${id}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
@@ -150,36 +162,49 @@
   }
   loadRules();
 
-  document.getElementById('toggle-rule-form')!.addEventListener('click', () => {
-    const form = document.getElementById('rule-form')!;
-    form.style.display = form.style.display === 'none' ? '' : 'none';
-  });
-
-  document.getElementById('rule-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target as HTMLFormElement);
-    const body: any = {
-      match_field: fd.get('match_field'),
-      match_pattern: fd.get('match_pattern'),
-      action: fd.get('action'),
-      action_value: fd.get('action_value') || null,
-      app_name: (document.getElementById('rule-app-name') as HTMLSelectElement).value || null,
-      enabled: fd.get('enabled') === 'on',
-    };
-    await fetch('/api/rules', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+  const toggleRuleForm = document.getElementById('toggle-rule-form');
+  if (toggleRuleForm) {
+    toggleRuleForm.addEventListener('click', () => {
+      const form = document.getElementById('rule-form');
+      if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
     });
-    (e.target as HTMLFormElement).reset();
-    document.getElementById('rule-form')!.style.display = 'none';
-    loadRules();
-  });
+  }
 
-  document.getElementById('rule-action')!.addEventListener('change', (e) => {
-    const val = (e.target as HTMLSelectElement).value;
-    document.getElementById('rule-value')!.style.display = val === 'mute' ? 'none' : '';
-  });
+  const ruleForm = document.getElementById('rule-form');
+  if (ruleForm) {
+    ruleForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const target = e.target;
+      const fd = new FormData(target);
+      const appNameEl = document.getElementById('rule-app-name');
+      const body = {
+        match_field: fd.get('match_field'),
+        match_pattern: fd.get('match_pattern'),
+        action: fd.get('action'),
+        action_value: fd.get('action_value') || null,
+        app_name: appNameEl ? (appNameEl.value || null) : null,
+        enabled: fd.get('enabled') === 'on',
+      };
+      await fetch('/api/rules', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      target.reset();
+      ruleForm.style.display = 'none';
+      loadRules();
+    });
+  }
+
+  const ruleAction = document.getElementById('rule-action');
+  if (ruleAction) {
+    ruleAction.addEventListener('change', (e) => {
+      const target = e.target;
+      const val = target.value;
+      const ruleValue = document.getElementById('rule-value');
+      if (ruleValue) ruleValue.style.display = val === 'mute' ? 'none' : '';
+    });
+  }
 
   // ── Events ────────────────────────────────────────────────────────────────
   async function loadEvents() {
@@ -187,12 +212,13 @@
       const after = lastEventId;
       const url = after > 0 ? `/api/events?after=${after}` : '/api/events';
       const events = await fetch(url).then(r => r.json());
-      const container = document.getElementById('events')!;
+      const container = document.getElementById('events');
+      if (!container) return;
       if (!events.length && after === 0) {
         container.innerHTML = '<div class="empty">no events yet</div>';
         return;
       }
-      const html = events.map((ev: any) => `
+      const html = events.map(ev => `
         <div class="row event status-${esc(ev.status)}">
           <span class="ts">${esc(new Date(ev.ts).toLocaleString())}</span>
           <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}</span>
@@ -209,83 +235,104 @@
   }
   loadEvents();
 
-  document.getElementById('refresh-events')!.addEventListener('click', loadEvents);
+  const refreshEvents = document.getElementById('refresh-events');
+  if (refreshEvents) refreshEvents.addEventListener('click', loadEvents);
 
   // ── Test Push ─────────────────────────────────────────────────────────────
-  document.getElementById('test-push')!.addEventListener('click', async () => {
-    const toast = document.getElementById('toast')!;
-    try {
-      const res = await fetch('/api/test', { method: 'POST' }).then(r => r.json());
-      toast.innerHTML = `<div class="toast ok">sent to ${res.sent}/${res.total} device(s)</div>`;
-    } catch {
-      toast.innerHTML = '<div class="toast err">test push failed</div>';
-    }
-    setTimeout(() => { toast.innerHTML = ''; }, 3000);
-  });
+  const testPush = document.getElementById('test-push');
+  if (testPush) {
+    testPush.addEventListener('click', async () => {
+      const toast = document.getElementById('toast');
+      if (!toast) return;
+      try {
+        const res = await fetch('/api/test', { method: 'POST' }).then(r => r.json());
+        toast.innerHTML = `<div class="toast ok">sent to ${res.sent}/${res.total} device(s)</div>`;
+      } catch {
+        toast.innerHTML = '<div class="toast err">test push failed</div>';
+      }
+      setTimeout(() => { toast.innerHTML = ''; }, 3000);
+    });
+  }
 
   // ── Admin: Impersonation ──────────────────────────────────────────────────
   async function loadUsersForImpersonation() {
     try {
       const users = await fetch('/api/admin/users').then(r => r.json());
-      const select = document.getElementById('impersonate-select') as HTMLSelectElement;
-      const credSelect = document.getElementById('cred-user-select') as HTMLSelectElement;
-      select.innerHTML = '<option value="">view as user...</option>';
-      credSelect.innerHTML = '<option value="">select user...</option>';
-      for (const u of users) {
-        const opt = document.createElement('option');
-        opt.value = u.sub;
-        opt.textContent = `${u.email} ${u.is_admin ? '(admin)' : ''}`;
-        select.appendChild(opt);
-        const opt2 = document.createElement('option');
-        opt2.value = u.sub;
-        opt2.textContent = u.email;
-        credSelect.appendChild(opt2);
+      const select = document.getElementById('impersonate-select');
+      const credSelect = document.getElementById('cred-user-select');
+      if (select) {
+        select.innerHTML = '<option value="">view as user...</option>';
+        for (const u of users) {
+          const opt = document.createElement('option');
+          opt.value = u.sub;
+          opt.textContent = `${u.email} ${u.is_admin ? '(admin)' : ''}`;
+          select.appendChild(opt);
+        }
+      }
+      if (credSelect) {
+        credSelect.innerHTML = '<option value="">select user...</option>';
+        for (const u of users) {
+          const opt = document.createElement('option');
+          opt.value = u.sub;
+          opt.textContent = u.email;
+          credSelect.appendChild(opt);
+        }
       }
       // Populate app_name dropdown from credential names
       const creds = await fetch('/api/admin/credentials').then(r => r.json());
-      const appSelect = document.getElementById('rule-app-name') as HTMLSelectElement;
-      appSelect.innerHTML = '<option value="">app (optional)</option>';
-      const names = new Set<string>();
-      for (const c of creds) if (c.name) names.add(c.name);
-      for (const n of names) {
-        const opt = document.createElement('option');
-        opt.value = n;
-        opt.textContent = n;
-        appSelect.appendChild(opt);
+      const appSelect = document.getElementById('rule-app-name');
+      if (appSelect) {
+        appSelect.innerHTML = '<option value="">app (optional)</option>';
+        const names = new Set();
+        for (const c of creds) if (c.name) names.add(c.name);
+        for (const n of names) {
+          const opt = document.createElement('option');
+          opt.value = n;
+          opt.textContent = n;
+          appSelect.appendChild(opt);
+        }
       }
     } catch (err) { console.error(err); }
   }
 
-  document.getElementById('impersonate-select')!.addEventListener('change', async (e) => {
-    const sub = (e.target as HTMLSelectElement).value;
-    if (!sub) return;
-    await fetch('/api/admin/impersonate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ user_sub: sub }),
+  const impersonateSelect = document.getElementById('impersonate-select');
+  if (impersonateSelect) {
+    impersonateSelect.addEventListener('change', async (e) => {
+      const target = e.target;
+      const sub = target.value;
+      if (!sub) return;
+      await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user_sub: sub }),
+      });
+      location.reload();
     });
-    location.reload();
-  });
+  }
 
-  document.getElementById('stop-impersonate')!.addEventListener('click', async () => {
-    await fetch('/api/admin/impersonate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ clear: true }),
+  const stopImpersonate = document.getElementById('stop-impersonate');
+  if (stopImpersonate) {
+    stopImpersonate.addEventListener('click', async () => {
+      await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clear: true }),
+      });
+      location.reload();
     });
-    location.reload();
-  });
+  }
 
   // ── Admin: Credentials ────────────────────────────────────────────────────
   async function loadAdminCredentials() {
     try {
       const creds = await fetch('/api/admin/credentials').then(r => r.json());
-      const container = document.getElementById('credentials-list')!;
+      const container = document.getElementById('credentials-list');
+      if (!container) return;
       if (!creds.length) {
         container.innerHTML = '<div class="empty">no credentials</div>';
         return;
       }
-      container.innerHTML = creds.map((c: any) => `
+      container.innerHTML = creds.map(c => `
         <div class="row">
           <span class="device-ua">${esc(c.name)} · ${esc(c.id)}</span>
           <span class="meta">${c.message_count} msgs</span>
@@ -294,7 +341,9 @@
         </div>`).join('');
       container.querySelectorAll('[data-del-cred]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          const id = (e.target as HTMLElement).dataset.delCred!;
+          const target = e.target;
+          const id = target.dataset.delCred;
+          if (!id) return;
           if (!confirm('Delete this credential?')) return;
           await fetch(`/api/admin/credentials/${id}`, { method: 'DELETE' });
           loadAdminCredentials();
@@ -302,8 +351,10 @@
       });
       container.querySelectorAll('[data-toggle-cred]').forEach(cb => {
         cb.addEventListener('change', async (e) => {
-          const id = (e.target as HTMLInputElement).dataset.toggleCred!;
-          const enabled = (e.target as HTMLInputElement).checked;
+          const target = e.target;
+          const id = target.dataset.toggleCred;
+          const enabled = target.checked;
+          if (!id) return;
           await fetch(`/api/admin/credentials/${id}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
@@ -315,41 +366,51 @@
     } catch (err) { console.error(err); }
   }
 
-  document.getElementById('toggle-cred-form')!.addEventListener('click', () => {
-    const form = document.getElementById('cred-form')!;
-    form.style.display = form.style.display === 'none' ? '' : 'none';
-  });
+  const toggleCredForm = document.getElementById('toggle-cred-form');
+  if (toggleCredForm) {
+    toggleCredForm.addEventListener('click', () => {
+      const form = document.getElementById('cred-form');
+      if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+    });
+  }
 
-  document.getElementById('cred-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const userSub = (document.getElementById('cred-user-select') as HTMLSelectElement).value;
-    const name = (document.getElementById('cred-name') as HTMLInputElement).value.trim();
-    if (!userSub || !name) return;
-    try {
-      const res = await fetch('/api/admin/credentials', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ user_sub: userSub, name }),
-      }).then(r => r.json());
-      alert(`Credential created.\nUsername: ${res.id}\nPassword: ${res.password}\n\nCopy the password now — it will not be shown again.`);
-      (e.target as HTMLFormElement).reset();
-      document.getElementById('cred-form')!.style.display = 'none';
-      loadAdminCredentials();
-    } catch {
-      alert('failed to create credential');
-    }
-  });
+  const credForm = document.getElementById('cred-form');
+  if (credForm) {
+    credForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userSubEl = document.getElementById('cred-user-select');
+      const nameEl = document.getElementById('cred-name');
+      const userSub = userSubEl ? userSubEl.value : '';
+      const name = nameEl ? nameEl.value.trim() : '';
+      if (!userSub || !name) return;
+      try {
+        const res = await fetch('/api/admin/credentials', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ user_sub: userSub, name }),
+        }).then(r => r.json());
+        alert(`Credential created.\nUsername: ${res.id}\nPassword: ${res.password}\n\nCopy the password now — it will not be shown again.`);
+        const form = e.target;
+        if (form.reset) form.reset();
+        credForm.style.display = 'none';
+        loadAdminCredentials();
+      } catch {
+        alert('failed to create credential');
+      }
+    });
+  }
 
   // ── Admin: Unmatched Events ─────────────────────────────────────────────────
   async function loadUnmatchedEvents() {
     try {
       const events = await fetch('/api/admin/events/unmatched').then(r => r.json());
-      const container = document.getElementById('unmatched-events')!;
+      const container = document.getElementById('unmatched-events');
+      if (!container) return;
       if (!events.length) {
         container.innerHTML = '<div class="empty">no unmatched events</div>';
         return;
       }
-      container.innerHTML = events.map((ev: any) => `
+      container.innerHTML = events.map(ev => `
         <div class="row event status-${esc(ev.status)}">
           <span class="ts">${esc(new Date(ev.ts).toLocaleString())}</span>
           <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}</span>
@@ -358,17 +419,18 @@
         </div>`).join('');
     } catch (err) { console.error(err); }
   }
-  document.getElementById('refresh-unmatched')!.addEventListener('click', loadUnmatchedEvents);
+  const refreshUnmatched = document.getElementById('refresh-unmatched');
+  if (refreshUnmatched) refreshUnmatched.addEventListener('click', loadUnmatchedEvents);
 })();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function esc(s: unknown): string {
+function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!),
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
   );
 }
 
-function relTime(ts: number): string {
+function relTime(ts) {
   const d = Date.now() - ts;
   if (d < 60_000) return 'just now';
   if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`;
@@ -376,7 +438,7 @@ function relTime(ts: number): string {
   return `${Math.floor(d / 86_400_000)}d ago`;
 }
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
