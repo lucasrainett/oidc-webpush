@@ -67,10 +67,6 @@
           loadDevices();
         });
       });
-      if (enableBtn) {
-        enableBtn.disabled = true;
-        enableBtn.textContent = 'push enabled on this account';
-      }
     } catch (err) { console.error(err); }
   }
   loadDevices();
@@ -108,7 +104,7 @@
       })();
 
       enableBtn.addEventListener('click', async () => {
-        enableBtn.disabled = true;
+        const originalText = enableBtn.textContent;
         enableBtn.textContent = 'enabling…';
         try {
           const perm = await Notification.requestPermission();
@@ -130,8 +126,7 @@
           enableBtn.textContent = 'push enabled on this account';
         } catch (err) {
           console.error(err);
-          enableBtn.disabled = false;
-          enableBtn.textContent = 'enable on this device';
+          enableBtn.textContent = originalText || 'enable on this device';
           alert('could not enable push: ' + (err.message || String(err)));
         }
       });
