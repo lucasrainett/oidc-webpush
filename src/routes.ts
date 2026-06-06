@@ -102,11 +102,12 @@ export async function registerRoutes(app: FastifyInstance) {
 
       const user = upsertUserFromClaims(claims);
       const sid = createSession(user.sub);
-      reply.clearCookie('oidc_state', {
+      reply.setCookie('oidc_state', '', {
         path: '/',
         httpOnly: true,
         secure: config.baseUrl.startsWith('https'),
         sameSite: 'lax',
+        expires: new Date(0),
       });
       reply.setCookie('sid', sid, {
         httpOnly: true,
@@ -130,9 +131,10 @@ export async function registerRoutes(app: FastifyInstance) {
       httpOnly: true,
       secure: config.baseUrl.startsWith('https'),
       sameSite: 'lax' as const,
+      expires: new Date(0),
     };
-    reply.clearCookie('sid', cookieOpts);
-    reply.clearCookie('impersonate', cookieOpts);
+    reply.setCookie('sid', '', cookieOpts);
+    reply.setCookie('impersonate', '', cookieOpts);
     return reply.redirect('/');
   });
 
@@ -284,11 +286,12 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!u.is_admin) return reply.code(403).send({ error: 'forbidden' });
     const body = req.body as { user_sub?: string; clear?: boolean };
     if (body.clear) {
-      reply.clearCookie('impersonate', {
+      reply.setCookie('impersonate', '', {
         path: '/',
         httpOnly: true,
         secure: config.baseUrl.startsWith('https'),
         sameSite: 'lax',
+        expires: new Date(0),
       });
       return { ok: true };
     }

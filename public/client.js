@@ -375,6 +375,10 @@
   }
 
   const credForm = document.getElementById('cred-form');
+  const credResult = document.getElementById('cred-result');
+  const credResultId = document.getElementById('cred-result-id');
+  const credResultPass = document.getElementById('cred-result-pass');
+
   if (credForm) {
     credForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -387,7 +391,9 @@
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name }),
         }).then(r => r.json());
-        alert(`Credential created.\nUsername: ${res.id}\nPassword: ${res.password}\n\nCopy the password now — it will not be shown again.`);
+        if (credResult) credResult.style.display = '';
+        if (credResultId) credResultId.textContent = res.id;
+        if (credResultPass) credResultPass.textContent = res.password;
         const form = e.target;
         if (form.reset) form.reset();
         credForm.classList.remove('open');
@@ -397,6 +403,31 @@
       }
     });
   }
+
+  const hideCredResult = document.getElementById('hide-cred-result');
+  if (hideCredResult && credResult) {
+    hideCredResult.addEventListener('click', () => {
+      credResult.style.display = 'none';
+    });
+  }
+
+  function copyToClipboard(el) {
+    if (!el) return;
+    const text = el.textContent;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  }
+
+  document.getElementById('copy-cred-id')?.addEventListener('click', () => copyToClipboard(credResultId));
+  document.getElementById('copy-cred-pass')?.addEventListener('click', () => copyToClipboard(credResultPass));
 
   // ── Admin: Unmatched Events ─────────────────────────────────────────────────
   async function loadUnmatchedEvents() {

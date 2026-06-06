@@ -102,6 +102,22 @@
         <input id="cred-name" placeholder="credential name (e.g. Proxmox)" required>
         <button type="submit" class="primary">create</button>
       </form>
+      <div id="cred-result" style="display:none">
+        <div class="row">
+          <span class="device-ua">username</span>
+          <code id="cred-result-id" class="mono"></code>
+          <button class="ghost" id="copy-cred-id">copy</button>
+        </div>
+        <div class="row">
+          <span class="device-ua">password</span>
+          <code id="cred-result-pass" class="mono"></code>
+          <button class="ghost" id="copy-cred-pass">copy</button>
+        </div>
+        <div class="row" style="border:0">
+          <span class="meta">copy these now — they will not be shown again</span>
+          <button class="ghost" id="hide-cred-result">done</button>
+        </div>
+      </div>
       <div id="credentials-list"><div class="empty">loading…</div></div>
     </section>
 
