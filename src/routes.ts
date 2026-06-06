@@ -102,7 +102,12 @@ export async function registerRoutes(app: FastifyInstance) {
 
       const user = upsertUserFromClaims(claims);
       const sid = createSession(user.sub);
-      reply.clearCookie('oidc_state', { path: '/' });
+      reply.clearCookie('oidc_state', {
+        path: '/',
+        httpOnly: true,
+        secure: config.baseUrl.startsWith('https'),
+        sameSite: 'lax',
+      });
       reply.setCookie('sid', sid, {
         httpOnly: true,
         secure: config.baseUrl.startsWith('https'),
@@ -120,8 +125,14 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post('/auth/logout', async (req, reply) => {
     const sid = req.cookies.sid;
     if (sid) destroySession(sid);
-    reply.clearCookie('sid', { path: '/' });
-    reply.clearCookie('impersonate', { path: '/' });
+    const cookieOpts = {
+      path: '/',
+      httpOnly: true,
+      secure: config.baseUrl.startsWith('https'),
+      sameSite: 'lax' as const,
+    };
+    reply.clearCookie('sid', cookieOpts);
+    reply.clearCookie('impersonate', cookieOpts);
     return reply.redirect('/');
   });
 
@@ -273,7 +284,12 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!u.is_admin) return reply.code(403).send({ error: 'forbidden' });
     const body = req.body as { user_sub?: string; clear?: boolean };
     if (body.clear) {
-      reply.clearCookie('impersonate', { path: '/' });
+      reply.clearCookie('impersonate', {
+        path: '/',
+        httpOnly: true,
+        secure: config.baseUrl.startsWith('https'),
+        sameSite: 'lax',
+      });
       return { ok: true };
     }
     if (!body.user_sub) return reply.code(400).send({ error: 'missing user_sub' });

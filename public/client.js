@@ -166,7 +166,7 @@
   if (toggleRuleForm) {
     toggleRuleForm.addEventListener('click', () => {
       const form = document.getElementById('rule-form');
-      if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+      if (form) form.classList.toggle('open');
     });
   }
 
@@ -370,7 +370,7 @@
   if (toggleCredForm) {
     toggleCredForm.addEventListener('click', () => {
       const form = document.getElementById('cred-form');
-      if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+      if (form) form.classList.toggle('open');
     });
   }
 
