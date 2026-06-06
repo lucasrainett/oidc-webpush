@@ -238,6 +238,14 @@ main {
 .event.status-no_devices .status-pill { background: rgba(232, 166, 71, 0.12); color: var(--warn); }
 .event.status-test      .status-pill { background: rgba(246, 166, 35, 0.12); color: var(--accent); }
 
+.events-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+}
+.events-scroll::-webkit-scrollbar { width: 6px; }
+.events-scroll::-webkit-scrollbar-track { background: var(--bg); }
+.events-scroll::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
 @media (max-width: 640px) {
   .event { grid-template-columns: 1fr; gap: 4px; }
   .event .from, .event .ts { display: inline; }

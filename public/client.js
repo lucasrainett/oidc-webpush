@@ -36,7 +36,7 @@
   if (brandHost) brandHost.textContent = location.host;
 
   const smtpEndpoint = document.getElementById('smtp-endpoint');
-  if (smtpEndpoint) smtpEndpoint.textContent = location.hostname + ':2525';
+  if (smtpEndpoint && me.smtp_endpoint) smtpEndpoint.textContent = me.smtp_endpoint;
 
   // ── Devices ───────────────────────────────────────────────────────────────
   async function loadDevices() {
@@ -215,12 +215,16 @@
   }
 
   // ── Events ────────────────────────────────────────────────────────────────
+  let eventsCredFilter = '';
+
   async function loadEvents() {
     try {
       const after = lastEventId;
-      const url = after > 0 ? `/api/events?after=${after}` : '/api/events';
+      let url = after > 0 ? `/api/events?after=${after}` : '/api/events';
+      if (eventsCredFilter) url += (url.includes('?') ? '&' : '?') + 'credential=' + encodeURIComponent(eventsCredFilter);
       const events = await fetch(url).then(r => r.json());
       const container = document.getElementById('events');
+      const filterSelect = document.getElementById('events-cred-filter');
       if (!container) return;
       if (!events.length && after === 0) {
         container.innerHTML = '<div class="empty">no events yet</div>';
@@ -229,7 +233,7 @@
       const html = events.map(ev => `
         <div class="row event status-${esc(ev.status)}">
           <span class="ts">${esc(new Date(ev.ts).toLocaleString())}</span>
-          <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}</span>
+          <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}${ev.credential_name ? ' [' + esc(ev.credential_name) + ']' : ''}</span>
           <span class="subject">${esc((ev.subject ?? '').slice(0, 64))}</span>
           <span class="status-pill">${esc(ev.status)} · ${ev.delivered_count}/${ev.delivered_count + ev.failed_count}</span>
         </div>`).join('');
@@ -239,12 +243,35 @@
         container.insertAdjacentHTML('afterbegin', html);
       }
       for (const ev of events) if (ev.id > lastEventId) lastEventId = ev.id;
+
+      // populate credential filter from visible events
+      if (filterSelect && after === 0) {
+        const existing = new Set(Array.from(filterSelect.options).map(o => o.value));
+        for (const ev of events) {
+          if (ev.credential_name && !existing.has(ev.credential_name)) {
+            const opt = document.createElement('option');
+            opt.value = ev.credential_name;
+            opt.textContent = ev.credential_name;
+            filterSelect.appendChild(opt);
+            existing.add(ev.credential_name);
+          }
+        }
+      }
     } catch (err) { console.error(err); }
   }
   loadEvents();
 
   const refreshEvents = document.getElementById('refresh-events');
   if (refreshEvents) refreshEvents.addEventListener('click', loadEvents);
+
+  const eventsCredFilterEl = document.getElementById('events-cred-filter');
+  if (eventsCredFilterEl) {
+    eventsCredFilterEl.addEventListener('change', (e) => {
+      eventsCredFilter = e.target.value;
+      lastEventId = 0;
+      loadEvents();
+    });
+  }
 
   // ── Test Push ─────────────────────────────────────────────────────────────
   const testPush = document.getElementById('test-push');

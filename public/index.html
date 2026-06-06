@@ -84,12 +84,15 @@
       <header class="card-h">
         <h2>events</h2>
         <div class="card-actions">
+          <select id="events-cred-filter" class="admin-select">
+            <option value="">all sources</option>
+          </select>
           <button class="ghost" id="test-push">test push</button>
           <button class="ghost" id="refresh-events">refresh</button>
         </div>
       </header>
       <div id="toast" class="toast-slot"></div>
-      <div id="events"><div class="empty">loading…</div></div>
+      <div id="events" class="events-scroll"><div class="empty">loading…</div></div>
     </section>
 
     <!-- Admin: SMTP Credentials -->

@@ -47,6 +47,7 @@ export const config = {
     .filter(Boolean),
   aiFilterDefault: (process.env.AI_FILTER_DEFAULT ?? 'true') === 'true',
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  smtpEndpoint: process.env.SMTP_ENDPOINT || '',
 } as const;
 
 export function hasVapidKeys(): boolean {

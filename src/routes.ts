@@ -148,6 +148,7 @@ export async function registerRoutes(app: FastifyInstance) {
       display_name: u.display_name,
       is_admin: u.is_admin === 1,
       impersonating: realUser ? { email: realUser.email, display_name: realUser.display_name } : null,
+      smtp_endpoint: config.smtpEndpoint,
     };
   });
 
@@ -224,6 +225,13 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get('/api/events', async (req) => {
     const u = (req as AuthedRequest).user;
     const after = Number((req.query as any).after ?? 0);
+    const cred = (req.query as any).credential as string | undefined;
+    if (cred) {
+      if (after > 0) {
+        return queries.listEventsByCred.all(u.sub, after, cred, 50) as any[];
+      }
+      return queries.listAllEventsByCred.all(u.sub, cred, 50) as any[];
+    }
     if (after > 0) {
       return queries.listEvents.all(u.sub, after, 50) as any[];
     }
@@ -240,7 +248,7 @@ export async function registerRoutes(app: FastifyInstance) {
       const r = await sendPush(s, { title: 'Test notification', body: `Hello ${u.display_name ?? u.email}, push is working.`, ts: Date.now() });
       if (r.ok) delivered++;
     }));
-    queries.insertEvent.run(Date.now(), u.sub, '[test]', u.email, 'Test notification', null, 'test', delivered, subs.length - delivered, 'test');
+    queries.insertEvent.run(Date.now(), u.sub, '[test]', u.email, 'Test notification', null, 'test', delivered, subs.length - delivered, 'test', null);
     return { sent: delivered, total: subs.length };
   });
 

@@ -15,9 +15,9 @@ export function startSmtpServer() {
   const server = new SMTPServer({
     authOptional: false,
     disabledCommands: ['STARTTLS'],
-    async onAuth(auth, _session, cb) {
+    async onAuth(auth, session, cb) {
       const cred = queries.getCredentialById.get(auth.username) as
-        | { password_hash: string; enabled: number; user_sub: string; id: string }
+        | { password_hash: string; enabled: number; user_sub: string; id: string; name: string }
         | undefined;
       if (!cred || !cred.enabled) {
         return cb(new Error('invalid credentials'));
@@ -26,6 +26,7 @@ export function startSmtpServer() {
         const ok = await verify(cred.password_hash, auth.password ?? '');
         if (!ok) return cb(new Error('invalid credentials'));
         queries.updateCredentialStats.run(Date.now(), cred.id);
+        (session as any).credentialName = cred.name;
         return cb(null, { user: cred.user_sub });
       } catch {
         queries.incrementCredentialError.run(cred.id);
@@ -35,17 +36,18 @@ export function startSmtpServer() {
     async onData(stream, session, cb) {
       try {
         const parsed = await simpleParser(stream);
+        const credName = (session as any).credentialName as string | undefined;
         for (const rcpt of session.envelope.rcptTo) {
           const recipient = rcpt.address.toLowerCase().trim();
           const user = queries.userByEmail.get(recipient) as User | undefined;
           if (!user) {
             queries.insertEvent.run(
               Date.now(), null, parsed.from?.text ?? '', recipient,
-              parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user',
+              parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user', credName ?? null,
             );
             continue;
           }
-          await handleEmail(parsed, recipient, user);
+          await handleEmail(parsed, recipient, user, credName);
         }
         cb();
       } catch (err: any) {
@@ -60,7 +62,7 @@ export function startSmtpServer() {
   return server;
 }
 
-async function handleEmail(parsed: any, recipient: string, user: User) {
+async function handleEmail(parsed: any, recipient: string, user: User, credName?: string) {
   const from = parsed.from?.text ?? '';
   const subject = parsed.subject ?? '(no subject)';
   const body = parsed.text ?? (parsed.html ? String(parsed.html) : '');
@@ -71,7 +73,7 @@ async function handleEmail(parsed: any, recipient: string, user: User) {
   if (matched?.action === 'mute') {
     queries.insertEvent.run(
       Date.now(), user.sub, from, recipient, subject,
-      matched.id, 'mute', 0, 0, 'muted',
+      matched.id, 'mute', 0, 0, 'muted', credName ?? null,
     );
     return;
   }
@@ -92,7 +94,7 @@ async function handleEmail(parsed: any, recipient: string, user: User) {
   if (aiResult && aiResult.relevant === false) {
     queries.insertEvent.run(
       Date.now(), user.sub, from, recipient, subject,
-      matched?.id ?? null, 'ai_skip', 0, 0, 'ai_suppressed',
+      matched?.id ?? null, 'ai_skip', 0, 0, 'ai_suppressed', credName ?? null,
     );
     return;
   }
@@ -128,6 +130,6 @@ async function handleEmail(parsed: any, recipient: string, user: User) {
   queries.insertEvent.run(
     Date.now(), user.sub, from, recipient, subject,
     matched?.id ?? null, matched?.action ?? null,
-    delivered, failed, status,
+    delivered, failed, status, credName ?? null,
   );
 }
