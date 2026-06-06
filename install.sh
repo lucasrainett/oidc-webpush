@@ -67,28 +67,6 @@ command -v systemctl >/dev/null 2>&1 || die "systemd required"
 
 banner
 
-# ─── Detect existing install ──────────────────────────────────────────────
-if [[ -f "$INSTALL_DIR/.env" ]]; then
-  msg "existing installation found at $INSTALL_DIR"
-  msg "entering update mode..."
-  cd "$INSTALL_DIR"
-  if ! git diff --quiet; then
-    warn "local changes detected; stashing before pull"
-    git stash
-  fi
-  git pull origin "$BRANCH"
-  msg "installing dependencies..."
-  pnpm install --frozen-lockfile
-  msg "building..."
-  pnpm run build
-  msg "running database migrations..."
-  node dist/db.js migrate || true
-  msg "restarting service..."
-  systemctl restart "$APP"
-  ok "updated successfully"
-  exit 0
-fi
-
 # ─── Install Node.js & pnpm ───────────────────────────────────────────────
 msg "installing Node.js $NODE_MAJOR LTS..."
 if command -v apt-get >/dev/null 2>&1; then
@@ -107,6 +85,28 @@ fi
 msg "installing pnpm..."
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_HOME=/usr/local/share/pnpm sh -
 export PATH="/usr/local/share/pnpm/bin:$PATH"
+
+# ─── Detect existing install ──────────────────────────────────────────────
+if [[ -f "$INSTALL_DIR/.env" ]]; then
+  msg "existing installation found at $INSTALL_DIR"
+  msg "entering update mode..."
+  cd "$INSTALL_DIR"
+  if ! git diff --quiet; then
+    warn "local changes detected; stashing before pull"
+    git stash
+  fi
+  git pull origin "$BRANCH"
+  msg "installing dependencies..."
+  pnpm install --frozen-lockfile
+  msg "building..."
+  pnpm run build
+  msg "running database migrations..."
+  node dist/db.js || true
+  msg "restarting service..."
+  systemctl restart "$APP"
+  ok "updated successfully"
+  exit 0
+fi
 
 # ─── Clone & build ────────────────────────────────────────────────────────
 msg "cloning repo..."
@@ -168,6 +168,7 @@ AI_SKIP_PATTERNS=password|reset|credit card
 AI_FILTER_DEFAULT=$AI_FILTER_DEFAULT
 LOG_LEVEL=info
 EOF
+chmod 600 "$INSTALL_DIR/.env"
 
 # ─── Create systemd unit ──────────────────────────────────────────────────
 cat > "/etc/systemd/system/${APP}.service" <<EOF
