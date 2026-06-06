@@ -83,9 +83,25 @@
     } else {
       (async () => {
         try {
-          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
           await navigator.serviceWorker.ready;
-        } catch {
+          console.log('[CLIENT] SW registered, state:', reg.installing ? 'installing' : reg.waiting ? 'waiting' : 'active');
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (newWorker) {
+              console.log('[CLIENT] new SW installing');
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  console.log('[CLIENT] new SW activated, reloading...');
+                  window.location.reload();
+                }
+              });
+            }
+          });
+          // force update check on every page load
+          reg.update();
+        } catch (err) {
+          console.error('[CLIENT] SW registration failed:', err);
           enableBtn.disabled = true;
           enableBtn.textContent = 'service worker failed';
         }
@@ -500,6 +516,52 @@
   }
   const refreshUnmatched = document.getElementById('refresh-unmatched');
   if (refreshUnmatched) refreshUnmatched.addEventListener('click', loadUnmatchedEvents);
+
+  // ── Mute from notification click ──────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const muteFrom = params.get('mute_from');
+  if (muteFrom) {
+    const muteBanner = document.getElementById('mute-banner');
+    const muteFromEl = document.getElementById('mute-from');
+    if (muteBanner && muteFromEl) {
+      muteFromEl.textContent = muteFrom;
+      muteBanner.style.display = '';
+    }
+    const muteConfirm = document.getElementById('mute-confirm');
+    if (muteConfirm) {
+      muteConfirm.addEventListener('click', async () => {
+        try {
+          await fetch('/api/rules', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              match_field: 'from',
+              match_pattern: `^${escapeRegex(muteFrom)}$`,
+              action: 'mute',
+              enabled: true,
+            }),
+          });
+          const muteBanner = document.getElementById('mute-banner');
+          if (muteBanner) {
+            muteBanner.innerHTML = '<span>muted <strong>' + esc(muteFrom) + '</strong></span>';
+          }
+          loadRules();
+          history.replaceState({}, '', '/');
+        } catch (err) {
+          console.error(err);
+          alert('failed to create mute rule');
+        }
+      });
+    }
+    const muteCancel = document.getElementById('mute-cancel');
+    if (muteCancel) {
+      muteCancel.addEventListener('click', () => {
+        const muteBanner = document.getElementById('mute-banner');
+        if (muteBanner) muteBanner.style.display = 'none';
+        history.replaceState({}, '', '/');
+      });
+    }
+  }
 })();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -524,4 +586,8 @@ function urlBase64ToUint8Array(base64String) {
   const out = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; ++i) out[i] = raw.charCodeAt(i);
   return out;
+}
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

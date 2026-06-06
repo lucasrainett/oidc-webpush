@@ -20,6 +20,11 @@ await app.register(fastifyStatic, {
   root: path.join(__dirname, '..', 'public'),
   prefix: '/',
   decorateReply: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  },
 });
 
 await registerRoutes(app);
