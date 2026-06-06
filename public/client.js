@@ -4,6 +4,7 @@
   let lastEventId = 0;
   let isAdmin = false;
   let impersonating = null;
+  let currentSub = '';
 
   // ── Identity ──────────────────────────────────────────────────────────────
   try {
@@ -12,6 +13,7 @@
     if (who) who.textContent = me.email;
     isAdmin = me.is_admin;
     impersonating = me.impersonating;
+    currentSub = me.sub;
     if (isAdmin) {
       document.querySelectorAll('.admin-only').forEach(el => {
         el.style.display = '';
@@ -263,6 +265,7 @@
       if (select) {
         select.innerHTML = '<option value="">view as user...</option>';
         for (const u of users) {
+          if (u.sub === currentSub) continue;
           const opt = document.createElement('option');
           opt.value = u.sub;
           opt.textContent = `${u.email} ${u.is_admin ? '(admin)' : ''}`;

@@ -42,9 +42,9 @@ export async function registerRoutes(app: FastifyInstance) {
     const user = queries.userBySub.get(session.user_sub) as User | undefined;
     if (!user) return reply.code(401).send({ error: 'user not found' });
 
-    // admin impersonation
+    // admin impersonation (skip for admin API routes so admin can manage)
     const impersonating = req.cookies.impersonate;
-    if (impersonating && user.is_admin) {
+    if (impersonating && user.is_admin && !req.url.startsWith('/api/admin/')) {
       const target = queries.userBySub.get(impersonating) as User | undefined;
       if (target) {
         (req as AuthedRequest).user = target;
@@ -143,6 +143,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const u = (req as AuthedRequest).user;
     const realUser = (req as any)._realUser as User | undefined;
     return {
+      sub: u.sub,
       email: u.email,
       display_name: u.display_name,
       is_admin: u.is_admin === 1,
