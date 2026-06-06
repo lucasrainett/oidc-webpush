@@ -511,53 +511,7 @@
   }
   const refreshUnmatched = document.getElementById('refresh-unmatched');
   if (refreshUnmatched) refreshUnmatched.addEventListener('click', loadUnmatchedEvents);
-
-  // ── Mute from notification click ──────────────────────────────────────────
-  const params = new URLSearchParams(location.search);
-  const muteFrom = params.get('mute_from');
-  if (muteFrom) {
-    const muteBanner = document.getElementById('mute-banner');
-    const muteFromEl = document.getElementById('mute-from');
-    if (muteBanner && muteFromEl) {
-      muteFromEl.textContent = muteFrom;
-      muteBanner.style.display = '';
-    }
-    const muteConfirm = document.getElementById('mute-confirm');
-    if (muteConfirm) {
-      muteConfirm.addEventListener('click', async () => {
-        try {
-          await fetch('/api/rules', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              match_field: 'from',
-              match_pattern: `^${escapeRegex(muteFrom)}$`,
-              action: 'mute',
-              enabled: true,
-            }),
-          });
-          const muteBanner = document.getElementById('mute-banner');
-          if (muteBanner) {
-            muteBanner.innerHTML = '<span>muted <strong>' + esc(muteFrom) + '</strong></span>';
-          }
-          loadRules();
-          history.replaceState({}, '', '/');
-        } catch (err) {
-          console.error(err);
-          alert('failed to create mute rule');
-        }
-      });
-    }
-    const muteCancel = document.getElementById('mute-cancel');
-    if (muteCancel) {
-      muteCancel.addEventListener('click', () => {
-        const muteBanner = document.getElementById('mute-banner');
-        if (muteBanner) muteBanner.style.display = 'none';
-        history.replaceState({}, '', '/');
-      });
-    }
-  }
-})();
+})()();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function esc(s) {
@@ -583,6 +537,4 @@ function urlBase64ToUint8Array(base64String) {
   return out;
 }
 
-function escapeRegex(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+
