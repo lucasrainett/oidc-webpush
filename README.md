@@ -10,13 +10,13 @@ Transform any SMTP-capable application into instant push notifications on your p
 
 **oidc-webpush** sits between your apps and your devices. Apps send emails via SMTP (the way they already know how), and users receive them as native Web Push notifications — on phones, tablets, laptops, and desktops — through their browser's PWA.
 
-Every user authenticates through your existing **OIDC identity provider** (Authentik, Keycloak, Dex, Auth0, or any spec-compliant provider). No new passwords, no new accounts. The app learns each user's email address from their identity provider, and that's the address your other apps send notifications to.
+Every user authenticates through your existing **OIDC identity provider** (Authentik, Keycloak, Dex, Auth0, or any spec-compliant provider). No new passwords, no new accounts.
 
 **Key use cases:**
 - Proxmox backup alerts on your phone
-- CI/CD pipeline failures on your watch
-- Home Assistant notifications on your desktop
-- Server monitoring alerts, cron job outputs, anything that can send email
+- CI/CD pipeline failures on your desktop
+- Home Assistant notifications everywhere
+- Server monitoring alerts, cron job outputs — anything that can send email
 
 ---
 
@@ -27,34 +27,37 @@ Every user authenticates through your existing **OIDC identity provider** (Authe
 - **Web Push delivery** via VAPID to all enrolled devices
 - **OIDC Single Sign-On** — works with any OpenID Connect provider
 - **SQLite persistence** — one file, WAL mode, no external database
-- **Single binary** — one Node.js process, minimal footprint
+- **Single Node.js process** — minimal footprint
 
 ### Rules Engine
 - Per-user filtering rules: match on `from`, `subject`, or `body`
-- Actions: **mute** (drop silently), **priority** (1-5 urgency levels), **tag** (group notifications)
+- Actions: **mute** (drop silently), **priority** (1–5 urgency), **tag** (group notifications)
 - Pattern matching: regex or plain substring
 - Enable/disable rules without deleting them
-- Tag rules with app names for organization
+- **Rule tester**: validate a rule against a sample message before saving
+- Up/down reordering of rules
 
 ### AI Integration (Optional)
-- **Local Ollama** integration for on-device AI inference
+- **Local Ollama** integration — all inference stays on your server
 - **Smart filtering**: AI decides if a message is worth interrupting you for
-- **Smart summarization**: 140-character summaries instead of raw email bodies
-- **Bypass patterns**: Never filter out 2FA, verification, OTP, or alert keywords
-- **Skip patterns**: Never send sensitive content (passwords, credit cards) to the AI
-- Per-user opt-in/opt-out
+- **Smart summarization**: concise summaries instead of raw email bodies
+- **Bypass patterns**: never filter out 2FA, OTP, or alert keywords
+- **Skip patterns**: never send sensitive content to the AI
+- Per-user opt-in/opt-out via the settings panel
 
 ### Admin Features
-- **Admin impersonation**: View and manage any user's dashboard as if you were them
-- **Per-app SMTP credentials**: Create named credentials (e.g. "Proxmox", "Immich") with auto-generated tokens
-- **Unmatched events monitor**: See emails that couldn't be routed (typos, missing users)
-- **User management**: Promote/demote admins (env-listed admins are permanent for recovery)
+- **Admin impersonation**: view and manage any user's dashboard as if you were them
+- **Per-app SMTP credentials**: named credentials (e.g. "Proxmox", "Immich") with auto-generated tokens
+- **Optional credential restriction**: lock a credential to a specific recipient user
+- **Unmatched events monitor**: see emails that couldn't be routed
+- **User management**: promote/demote admins (env-listed admins are permanent)
 
 ### Frontend
 - **Single-page PWA** — installable on iOS, Android, and desktop
-- **Vanilla JavaScript** — no build step, no framework bloat
-- **Dark terminal aesthetic** — refined, distraction-free design
-- **Manual refresh** — no distracting auto-polling
+- **Vanilla JavaScript** — no build step, no framework
+- **Dark terminal aesthetic** — refined, distraction-free
+- **Per-device delivery status** — see exactly which device received each notification
+- **Event detail page** — tap a notification to view full content and mute the sender
 
 ---
 
@@ -91,19 +94,16 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpus
 
 ### Update an existing installation
 
-Simply run the same command again. It detects the existing installation, pulls latest code, rebuilds, runs any pending database migrations, and restarts the service. Your `.env` and database are preserved.
-
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpush/main/install.sh)"
-```
+Run the same command again — it detects the existing installation, pulls the latest code, rebuilds, runs any pending database migrations, and restarts the service. Your `.env` and database are preserved.
 
 ### Manual install
 
 ```bash
 git clone https://github.com/lucasrainett/oidc-webpush.git && cd oidc-webpush
 pnpm install
+pnpm run gen-icons   # generate PWA icons
 pnpm run build
-pnpm run gen-vapid    # save output to .env
+pnpm run gen-vapid   # save output to .env
 
 cp .env.example .env
 # Edit .env with your OIDC provider details and VAPID keys
@@ -121,7 +121,7 @@ node dist/app.js
 │ provider │         │   ┌──────────────┐ │
 └──────────┘         │   │  Fastify     │ │ ── HTTP/PWA (3000)
 [app] ───SMTP───────►│   │  SMTP server │ │ ── SMTP (2525)
-                     │   │  Web Push    │─┼──► FCM / Mozilla autopush / APNs
+                     │   │  Web Push    │─┼──► FCM / Mozilla / APNs
                      │   │  SQLite      │ │
                      │   │  Ollama AI   │ │
                      │   └──────────────┘ │
@@ -136,7 +136,7 @@ node dist/app.js
 4. **Rules engine** evaluates the user's rules (from/subject/body matching)
 5. **AI triage** (if enabled) summarizes the email and decides relevance
 6. **Web Push** fans out the notification to all of the user's enrolled devices
-7. **Event logging** writes delivery status to SQLite for the dashboard
+7. **Event logging** writes per-device delivery status to SQLite
 
 ---
 
@@ -152,7 +152,7 @@ All configuration is via environment variables in `.env`.
 | `OIDC_ISSUER` | Your OIDC provider's issuer URL | `https://sso.example.com` |
 | `OIDC_CLIENT_ID` | OAuth2 client ID | `oidc-webpush` |
 | `OIDC_CLIENT_SECRET` | OAuth2 client secret | `secret...` |
-| `COOKIE_SECRET` | Random 32+ byte hex string for session encryption | Generate with `openssl rand -hex 32` |
+| `COOKIE_SECRET` | Random 32+ byte hex string for session encryption | `openssl rand -hex 32` |
 
 ### Web Push (VAPID)
 
@@ -168,9 +168,9 @@ If `VAPID_PUBLIC` or `VAPID_PRIVATE` is blank on startup, the app generates keys
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ADMIN_EMAILS` | Comma-separated admin emails | `admin@example.com,ops@example.com` |
+| `ADMIN_EMAILS` | Comma-separated admin emails | `admin@example.com` |
 
-These users are automatically granted admin on first login and **cannot be demoted** through the UI. This is your break-glass recovery path.
+These users are automatically granted admin on first login and **cannot be demoted** through the UI.
 
 ### AI / Ollama (Optional)
 
@@ -183,7 +183,7 @@ These users are automatically granted admin on first login and **cannot be demot
 | `OLLAMA_QUEUE_TIMEOUT_MS` | Max time to wait in queue | `120000` |
 | `AI_BYPASS_PATTERNS` | Always deliver emails matching these | `2fa\|verification\|otp\|alert` |
 | `AI_SKIP_PATTERNS` | Never send matching content to AI | `password\|reset\|credit card` |
-| `AI_FILTER_DEFAULT` | Default for new users' AI filtering | `true` |
+| `AI_FILTER_DEFAULT` | Default AI filtering for new users | `true` |
 
 ### Server
 
@@ -195,159 +195,105 @@ These users are automatically granted admin on first login and **cannot be demot
 | `SMTP_HOST` | SMTP bind address | `0.0.0.0` |
 | `DB_PATH` | SQLite database file | `./data/oidc-webpush.db` |
 | `LOG_LEVEL` | Fastify log level | `info` |
+| `SMTP_ENDPOINT` | Human-readable SMTP address shown in dashboard | `notify.example.com:2525` |
+| `EVENT_RETENTION_DAYS` | Delete events older than N days (0 = keep forever) | `0` |
 
 ---
 
-## Using oidc-webpush
+## Usage
 
 ### Configuring your OIDC Provider
 
-1. Create an OAuth2/OpenID provider with:
+1. Create an OAuth2/OpenID client with:
    - **Client type**: Confidential
    - **Redirect URI**: `https://notify.example.com/auth/callback`
    - **Scopes**: `openid profile email`
-   - **Signing key**: RSA recommended
-2. Copy the **OpenID Configuration Issuer** URL to `OIDC_ISSUER`
+2. Copy the **Issuer URL** to `OIDC_ISSUER`
 3. Copy client ID and secret to `.env`
 
 ### Enrolling a Device
 
-1. Open the web app in your browser
-2. Log in via your OIDC provider
-3. Click **"enable on this device"**
-4. Allow notification permissions when prompted
-5. The device appears in your Devices list
+1. Open the web app and log in
+2. Click **"enable on this device"**
+3. Allow notification permissions when prompted
 
 ### Creating Rules
 
-1. In the Rules section, click **"+ add rule"**
-2. Select what to match: `from`, `subject`, or `body`
-3. Enter a pattern: `/regex/` or plain text (substring match)
-4. Choose action: `priority`, `mute`, or `tag`
-5. Optionally assign an app name for organization
-6. Toggle "enabled" on/off as needed
+1. Click **"+ add rule"** in the Rules section
+2. Choose match field (`subject`, `from`, `body`), enter a pattern, pick an action
+3. Use **"test rule"** to verify the rule matches what you expect before saving
 
 ### Sending Notifications from Apps
 
-Configure any SMTP-capable app to send to your user's email address:
+Configure any SMTP-capable app:
 
 | Field | Value |
 |-------|-------|
-| SMTP host | `notify.example.com` (or your server IP) |
+| SMTP host | your server hostname |
 | SMTP port | `2525` |
 | Authentication | Required — use admin-created credentials |
-| From | Anything (shown in notification) |
 | To | The recipient's OIDC email address |
 
-**Example from command line:**
+### Creating SMTP Credentials (Admin)
 
-```bash
-echo "Backup completed in 47 minutes" | \
-  mail -s "[proxmox] backup ok" -r "sender@example.com" alice@example.com \
-       -S smtp=smtp://notify.example.com:2525
-```
-
-### Admin: Creating SMTP Credentials
-
-1. Log in as an admin
-2. Scroll to the **SMTP Credentials** section
-3. Select the user who should receive these emails
-4. Name the credential (e.g. "Proxmox Backup")
-5. Copy the username (`cred_xxx`) and password (`sk_xxx`) — shown **once only**
-6. Paste these into your app's SMTP settings
-
-### Admin: Impersonating Users
-
-1. Select a user from the **"view as user"** dropdown
-2. The page reloads showing that user's devices, rules, and events
-3. A banner shows "Viewing as alice@example.com [return to admin view]"
-4. You can create rules, send test pushes, or manage devices on their behalf
+1. Scroll to the **SMTP Credentials** section
+2. Click **"+ add credential"**, give it a name (e.g. "Proxmox Backup")
+3. Optionally restrict it to a specific recipient user
+4. Copy the username and password — shown **once only**
 
 ---
 
-## API Reference
+## API
 
 All endpoints return JSON except `/api/vapid-public-key` (plain text) and static files.
 
 ### Auth
-- `GET /auth/login` — Redirects to OIDC provider
+- `GET /auth/login` — redirects to OIDC provider
 - `GET /auth/callback` — OIDC callback, sets session cookie
-- `POST /auth/logout` — Clears session
+- `POST /auth/logout` — clears session
 
 ### User
-- `GET /api/me` — `{ email, display_name, is_admin, impersonating }`
+- `GET /api/me` — `{ email, display_name, is_admin, impersonating, smtp_endpoint, smtp_port }`
+- `GET /api/prefs` — `{ use_ai_filter, use_ai_summary }`
+- `PATCH /api/prefs` — update AI preferences
 
 ### Devices
-- `GET /api/devices` — List subscriptions
-- `POST /api/subscribe` — Create/refresh subscription
-- `DELETE /api/devices/:id` — Remove subscription
+- `GET /api/devices` — list subscriptions
+- `POST /api/subscribe` — create/refresh subscription
+- `DELETE /api/devices/:id` — remove subscription
 
 ### Rules
-- `GET /api/rules` — List rules
-- `POST /api/rules` — Create rule
-- `DELETE /api/rules/:id` — Delete rule
-- `PATCH /api/rules/:id` — Toggle enabled
+- `GET /api/rules` — list rules
+- `POST /api/rules` — create rule
+- `POST /api/rules/test` — test a message against current rules
+- `DELETE /api/rules/:id` — delete rule
+- `PATCH /api/rules/:id` — toggle enabled
+- `PATCH /api/rules/:id/move` — reorder (`{ direction: "up" | "down" }`)
 
 ### Events
-- `GET /api/events?after=<id>` — List events (incremental with `after`)
-
-### Test
-- `POST /api/test` — Send test push to all devices
+- `GET /api/events?after=<id>&before=<id>&status=<status>&credential=<name>` — list events
+- `GET /api/events/:publicId` — event detail including per-device delivery status
+- `POST /api/test` — send test push
 
 ### Admin
-- `GET /api/admin/users` — List all users with stats
-- `GET /api/admin/events/unmatched` — Emails to unknown recipients
-- `POST /api/admin/users/:sub/admin` — Promote/demote admin
-- `POST /api/admin/impersonate` — Start/stop impersonation
-
-### SMTP Credentials (Admin)
-- `GET /api/admin/credentials` — List all credentials
-- `POST /api/admin/credentials` — Create credential (returns password once)
-- `PATCH /api/admin/credentials/:id` — Toggle enabled
-- `DELETE /api/admin/credentials/:id` — Delete
+- `GET /api/admin/users` — list all users with stats
+- `GET /api/admin/events/unmatched` — emails to unknown recipients
+- `POST /api/admin/users/:sub/admin` — promote/demote admin
+- `POST /api/admin/impersonate` — start/stop impersonation
+- `GET /api/admin/credentials` — list all credentials
+- `POST /api/admin/credentials` — create credential
+- `PATCH /api/admin/credentials/:id` — toggle enabled
+- `DELETE /api/admin/credentials/:id` — delete
 
 ---
 
 ## Security
 
-- **Authentication**: OIDC only. No local accounts, no API keys for browser access.
+- **Authentication**: OIDC only. No local accounts.
 - **Sessions**: Server-side SQLite storage, 7-day expiry, HttpOnly `SameSite=Lax` cookies.
-- **SMTP**: Mandatory authentication with Argon2id-hashed per-app credentials. No unauthenticated mail accepted.
-- **CSRF**: Protected by `SameSite=Lax` cookies + OIDC state/nonce. No additional CSRF tokens.
-- **Push**: VAPID-authenticated Web Push. Keys are permanent — treat them like TLS certificates.
-- **AI Privacy**: All AI inference happens on your local Ollama instance. No data leaves your network. Sensitive content can be excluded via `AI_SKIP_PATTERNS`.
-- **Admin Recovery**: Env-listed admins (`ADMIN_EMAILS`) are permanent. If the database is corrupted, you can always recover admin access.
-
----
-
-## Troubleshooting
-
-### "Missing required env var: BASE_URL"
-The app exits on startup if required environment variables are missing. Check your `.env` file.
-
-### "VAPID keys missing" banner
-The app auto-generates VAPID keys if they're not in `.env`. Copy the printed keys into `.env` and restart.
-
-### SMTP connection refused
-- Verify the app is running and listening on the SMTP port (`ss -tlnp | grep 2525`)
-- Check firewall rules
-- Ensure the sending app uses the correct hostname and port
-
-### Push notifications not arriving
-1. Check the Events section in the dashboard — look for `failed` or `no_devices` status
-2. Verify the device is enrolled (Devices section)
-3. Check browser console for Service Worker errors
-4. On iOS: ensure the PWA is installed ("Add to Home Screen")
-
-### "invalid credentials" on SMTP
-- Verify you're using a credential created by an admin
-- Check that the credential hasn't been disabled or deleted
-- Ensure the username and password are copied correctly (no extra whitespace)
-
-### AI not working
-- Verify Ollama is running: `curl http://localhost:11434/api/tags`
-- Check `OLLAMA_URL` points to the correct host
-- The app falls back to direct delivery if Ollama is unreachable — check Events for `ai_suppressed` entries
+- **SMTP**: Mandatory authentication with Argon2id-hashed credentials. No unauthenticated mail accepted.
+- **Push**: VAPID-authenticated Web Push. Treat VAPID keys like TLS certificates.
+- **AI Privacy**: All inference on your local Ollama instance. No data leaves your network.
 
 ---
 
@@ -357,12 +303,13 @@ The app auto-generates VAPID keys if they're not in `.env`. Copy the printed key
 git clone https://github.com/lucasrainett/oidc-webpush.git
 cd oidc-webpush
 pnpm install
-pnpm run dev        # tsx watch mode
+pnpm run gen-icons   # generate public/icons/*.png
+pnpm run dev         # tsx watch mode
 ```
 
 ### Tech Stack
 - **Backend**: Fastify 5, TypeScript, ES modules
-- **Database**: better-sqlite3 with WAL mode
+- **Database**: better-sqlite3, WAL mode
 - **Auth**: openid-client with PKCE
 - **SMTP**: smtp-server + mailparser
 - **Push**: web-push with VAPID
@@ -374,7 +321,7 @@ pnpm run dev        # tsx watch mode
 src/
   app.ts        # Bootstrap
   config.ts     # Environment configuration
-  db.ts         # SQLite schema and queries
+  db.ts         # SQLite schema, migrations, queries
   types.ts      # TypeScript interfaces
   auth.ts       # OIDC client and session management
   routes.ts     # HTTP API handlers
@@ -382,13 +329,17 @@ src/
   push.ts       # Web Push delivery
   rules.ts      # Rules engine
   ai.ts         # Ollama integration
-  utils.ts      # Helpers (esc, relTime, prompt builder)
+  utils.ts      # Helpers
 public/
   index.html    # Single-page dashboard
   client.js     # Vanilla JS frontend
   sw.js         # Service Worker for push
   style.css     # Dark terminal aesthetic
   manifest.json # PWA manifest
+  event.html    # Notification detail / mute page
+scripts/
+  gen-icons.mjs # SVG → PNG icon generation
+  gen-vapid.mjs # VAPID key generation helper
 ```
 
 ---

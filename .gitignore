@@ -8,3 +8,4 @@ data/
 *.tsbuildinfo
 .idea/
 scripts/
+.claude/

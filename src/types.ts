@@ -66,6 +66,18 @@ export interface SmtpCredential {
   last_used_at: number | null;
   message_count: number;
   error_count: number;
+  allowed_user_sub: string | null;
+}
+
+export interface EventDelivery {
+  id: number;
+  event_id: number;
+  sub_id: string;
+  endpoint: string;
+  user_agent: string | null;
+  status: string;
+  status_code: number | null;
+  ts: number;
 }
 
 export interface AiResult {

@@ -76,6 +76,28 @@
       font-family: var(--mono);
       font-size: 14px;
     }
+    .delivery-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-family: var(--mono);
+      font-size: 11px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .delivery-row:last-child { border-bottom: 0; }
+    .delivery-ua { color: var(--fg-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .delivery-status-ok  { color: var(--ok); }
+    .delivery-status-err { color: var(--err); }
+    .detail-section-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--fg-faint);
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -142,6 +164,15 @@
               <div class="value">${esc(ev.subject)}</div>
             </div>
             <div class="detail-body">${esc(ev.body || '(no body)')}</div>
+            ${ev.deliveries && ev.deliveries.length ? `
+            <div class="detail-field" style="margin-bottom:24px">
+              <div class="detail-section-label">delivery</div>
+              ${ev.deliveries.map(d => `
+                <div class="delivery-row">
+                  <span class="delivery-ua">${esc(d.user_agent || 'unknown device')}</span>
+                  <span class="${d.status === 'delivered' ? 'delivery-status-ok' : 'delivery-status-err'}">${esc(d.status)}${d.status_code ? ' ' + d.status_code : ''}</span>
+                </div>`).join('')}
+            </div>` : ''}
             <div class="detail-actions">
               <button class="primary" id="mute-btn">mute sender</button>
               <button class="ghost" id="dismiss-btn">dismiss</button>

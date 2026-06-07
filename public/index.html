@@ -52,7 +52,10 @@
     <section class="card">
       <header class="card-h">
         <h2>rules</h2>
-        <button class="ghost" id="toggle-rule-form">+ add rule</button>
+        <div class="card-actions">
+          <button class="ghost" id="toggle-rule-test">test</button>
+          <button class="ghost" id="toggle-rule-form">+ add rule</button>
+        </div>
       </header>
 
       <form id="rule-form" class="rule-form">
@@ -77,6 +80,14 @@
         <button type="submit" class="primary">save</button>
       </form>
 
+      <form id="rule-test-form" class="rule-form">
+        <input id="rule-test-from" name="from" placeholder="from">
+        <input id="rule-test-subject" name="subject" placeholder="subject">
+        <input id="rule-test-body" name="body" placeholder="body">
+        <button type="submit" class="primary">test</button>
+      </form>
+      <div id="rule-test-result" class="toast-slot"></div>
+
       <div id="rules"><div class="empty">loading…</div></div>
     </section>
 
@@ -84,6 +95,16 @@
       <header class="card-h">
         <h2>events</h2>
         <div class="card-actions">
+          <select id="events-status-filter" class="admin-select">
+            <option value="">all statuses</option>
+            <option value="delivered">delivered</option>
+            <option value="failed">failed</option>
+            <option value="ai_suppressed">ai suppressed</option>
+            <option value="muted">muted</option>
+            <option value="no_devices">no devices</option>
+            <option value="no_user">no user</option>
+            <option value="credential_mismatch">cred mismatch</option>
+          </select>
           <select id="events-cred-filter" class="admin-select">
             <option value="">all sources</option>
           </select>
@@ -93,6 +114,27 @@
       </header>
       <div id="toast" class="toast-slot"></div>
       <div id="events" class="events-scroll"><div class="empty">loading…</div></div>
+      <div id="events-load-older" style="display:none; padding:10px 18px; border-top:1px solid var(--border)">
+        <button class="ghost" id="load-older-btn" style="width:100%">load older</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-h">
+        <h2>settings</h2>
+      </header>
+      <div class="row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="pref-ai-filter">
+          AI filtering — suppress low-relevance emails
+        </label>
+      </div>
+      <div class="row" style="border-bottom:0">
+        <label class="checkbox-label">
+          <input type="checkbox" id="pref-ai-summary">
+          AI summary — use AI-generated push body
+        </label>
+      </div>
     </section>
 
     <!-- Admin: SMTP Credentials -->
@@ -108,6 +150,9 @@
       </div>
       <form id="cred-form" class="rule-form">
         <input id="cred-name" placeholder="credential name (e.g. Proxmox)" required>
+        <select id="cred-allowed-user" class="admin-select">
+          <option value="">any user</option>
+        </select>
         <button type="submit" class="primary">create</button>
       </form>
       <div id="cred-result" style="display:none">

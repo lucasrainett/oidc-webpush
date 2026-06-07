@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyCookie from '@fastify/cookie';
 import fastifyFormbody from '@fastify/formbody';
 import { config } from './config.js';
+import { queries } from './db.js';
 import { registerRoutes } from './routes.js';
 import { startSmtpServer } from './smtp.js';
 
@@ -33,6 +34,13 @@ await app.listen({ host: config.host, port: config.port });
 console.log(`HTTP listening on ${config.host}:${config.port}`);
 
 startSmtpServer();
+
+if (config.eventRetentionDays > 0) {
+  const retentionMs = config.eventRetentionDays * 86_400_000;
+  setInterval(() => {
+    queries.cleanOldEvents.run(Date.now() - retentionMs);
+  }, 86_400_000);
+}
 
 const shutdown = async (sig: string) => {
   console.log(`received ${sig}, shutting down`);

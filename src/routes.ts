@@ -17,7 +17,8 @@ import {
   destroySession,
 } from './auth.js';
 import { sendPush } from './push.js';
-import type { User, Subscription, Rule, Event } from './types.js';
+import { evalRules } from './rules.js';
+import type { User, Subscription, Rule, Event, EventDelivery } from './types.js';
 
 interface AuthedRequest extends FastifyRequest {
   user: User;
@@ -154,6 +155,7 @@ export async function registerRoutes(app: FastifyInstance) {
       is_admin: u.is_admin === 1,
       impersonating: realUser ? { email: realUser.email, display_name: realUser.display_name } : null,
       smtp_endpoint: config.smtpEndpoint,
+      smtp_port: config.smtpPort,
     };
   });
 
@@ -226,21 +228,83 @@ export async function registerRoutes(app: FastifyInstance) {
     return queries.listRules.all(u.sub) as Rule[];
   });
 
+  app.patch('/api/rules/:id/move', async (req, reply) => {
+    const u = (req as AuthedRequest).user;
+    const { id } = req.params as { id: string };
+    const body = req.body as { direction: string };
+    if (body.direction !== 'up' && body.direction !== 'down') return reply.code(400).send({ error: 'bad direction' });
+    const rule = queries.getRuleById.get(id, u.sub) as Rule | undefined;
+    if (!rule) return reply.code(404).send({ error: 'not found' });
+    const swapPos = body.direction === 'up' ? rule.position - 1 : rule.position + 1;
+    const other = queries.getRuleByPosition.get(u.sub, swapPos) as Rule | undefined;
+    if (!other) return queries.listRules.all(u.sub) as Rule[];
+    queries.swapRulePositions.run(rule.id, swapPos, other.id, rule.position, rule.id, other.id);
+    return queries.listRules.all(u.sub) as Rule[];
+  });
+
+  app.post('/api/rules/test', async (req, reply) => {
+    const u = (req as AuthedRequest).user;
+    const body = req.body as { from?: string; subject?: string; body?: string };
+    const rules = queries.listRules.all(u.sub) as Rule[];
+    const matched = evalRules(rules, {
+      from: body.from ?? '',
+      subject: body.subject ?? '',
+      body: body.body ?? '',
+    });
+    return {
+      matched: matched ?? null,
+      action: matched?.action ?? null,
+      action_value: matched?.action_value ?? null,
+      would_deliver: matched?.action !== 'mute',
+    };
+  });
+
+  // ── Prefs ─────────────────────────────────────────────────────────────────
+  app.get('/api/prefs', async (req) => {
+    const u = (req as AuthedRequest).user;
+    return {
+      use_ai_filter: getUserPref(u.sub, 'use_ai_filter', String(config.aiFilterDefault)) !== 'false',
+      use_ai_summary: getUserPref(u.sub, 'use_ai_summary', 'true') !== 'false',
+    };
+  });
+
+  app.patch('/api/prefs', async (req, reply) => {
+    const u = (req as AuthedRequest).user;
+    const body = req.body as { use_ai_filter?: boolean; use_ai_summary?: boolean };
+    if (typeof body.use_ai_filter === 'boolean') setUserPref(u.sub, 'use_ai_filter', String(body.use_ai_filter));
+    if (typeof body.use_ai_summary === 'boolean') setUserPref(u.sub, 'use_ai_summary', String(body.use_ai_summary));
+    return {
+      use_ai_filter: getUserPref(u.sub, 'use_ai_filter', String(config.aiFilterDefault)) !== 'false',
+      use_ai_summary: getUserPref(u.sub, 'use_ai_summary', 'true') !== 'false',
+    };
+  });
+
   // ── Events ────────────────────────────────────────────────────────────────
   app.get('/api/events', async (req) => {
     const u = (req as AuthedRequest).user;
-    const after = Number((req.query as any).after ?? 0);
-    const cred = (req.query as any).credential as string | undefined;
-    if (cred) {
-      if (after > 0) {
-        return queries.listEventsByCred.all(u.sub, after, cred, 50) as any[];
-      }
-      return queries.listAllEventsByCred.all(u.sub, cred, 50) as any[];
+    const q = req.query as any;
+    const after = Number(q.after ?? 0);
+    const before = Number(q.before ?? 0);
+    const cred = q.credential as string | undefined;
+    const status = q.status as string | undefined;
+    const LIMIT = 50;
+
+    if (before > 0) {
+      if (status && cred) return queries.listEventsBeforeByStatusAndCred.all(u.sub, before, status, cred, LIMIT) as any[];
+      if (status)        return queries.listEventsBeforeByStatus.all(u.sub, before, status, LIMIT) as any[];
+      if (cred)          return queries.listEventsBeforeByCred.all(u.sub, before, cred, LIMIT) as any[];
+      return queries.listEventsBefore.all(u.sub, before, LIMIT) as any[];
     }
     if (after > 0) {
-      return queries.listEvents.all(u.sub, after, 50) as any[];
+      if (status && cred) return queries.listEventsByStatusAndCred.all(u.sub, after, status, cred, LIMIT) as any[];
+      if (status)         return queries.listEventsByStatus.all(u.sub, after, status, LIMIT) as any[];
+      if (cred)           return queries.listEventsByCred.all(u.sub, after, cred, LIMIT) as any[];
+      return queries.listEvents.all(u.sub, after, LIMIT) as any[];
     }
-    return queries.listAllEvents.all(u.sub, 50) as any[];
+    if (status && cred) return queries.listAllEventsByStatusAndCred.all(u.sub, status, cred, LIMIT) as any[];
+    if (status)         return queries.listAllEventsByStatus.all(u.sub, status, LIMIT) as any[];
+    if (cred)           return queries.listAllEventsByCred.all(u.sub, cred, LIMIT) as any[];
+    return queries.listAllEvents.all(u.sub, LIMIT) as any[];
   });
 
   app.get('/api/events/:publicId', async (req, reply) => {
@@ -258,7 +322,8 @@ export async function registerRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden' });
     }
     req.log.info({ publicId }, 'event found, returning');
-    return ev;
+    const deliveries = queries.listDeliveriesByEvent.all(ev.id) as EventDelivery[];
+    return { ...ev, deliveries };
   });
 
   // ── Test push ─────────────────────────────────────────────────────────────
@@ -274,6 +339,7 @@ export async function registerRoutes(app: FastifyInstance) {
     await Promise.all(subs.map(async (s) => {
       const r = await sendPush(s, { title: 'Test notification', body: testBody, ts: Date.now(), eventId, publicId: eventPublicId });
       if (r.ok) delivered++;
+      queries.insertDelivery.run(eventId, s.id, s.endpoint, s.user_agent, r.ok ? 'delivered' : 'failed', r.statusCode ?? null, Date.now());
     }));
     return { sent: delivered, total: subs.length };
   });
@@ -353,12 +419,17 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post('/api/admin/credentials', async (req, reply) => {
     const u = (req as AuthedRequest).user;
     if (!u.is_admin) return reply.code(403).send({ error: 'forbidden' });
-    const body = req.body as { name: string };
+    const body = req.body as { name: string; allowed_user_sub?: string };
     if (!body.name?.trim()) return reply.code(400).send({ error: 'bad body' });
+    const allowedUserSub = body.allowed_user_sub?.trim() || null;
+    if (allowedUserSub) {
+      const target = queries.userBySub.get(allowedUserSub);
+      if (!target) return reply.code(404).send({ error: 'user not found' });
+    }
     const id = 'cred_' + nanoid(12);
     const password = 'sk_' + nanoid(24);
     const hash = await argon2Hash(password);
-    queries.insertCredential.run(id, u.sub, body.name.trim(), hash, 1, Date.now());
+    queries.insertCredential.run(id, u.sub, body.name.trim(), hash, 1, Date.now(), allowedUserSub);
     return { id, name: body.name.trim(), password };
   });
 

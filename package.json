@@ -14,6 +14,7 @@
     "start": "node dist/app.js",
     "typecheck": "tsc --noEmit",
     "gen-vapid": "node -e \"const w=require('web-push');const k=w.generateVAPIDKeys();console.log('VAPID_PUBLIC='+k.publicKey);console.log('VAPID_PRIVATE='+k.privateKey)\"",
+    "gen-icons": "node scripts/gen-icons.mjs",
     "test-smtp": "node scripts/test-smtp.mjs"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@types/node": "^22.10.5",
     "@types/smtp-server": "^3.5.10",
     "@types/web-push": "^3.6.4",
+    "sharp": "^0.34.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }

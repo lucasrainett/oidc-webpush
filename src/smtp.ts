@@ -18,7 +18,7 @@ export function startSmtpServer() {
     disabledCommands: ['STARTTLS'],
     async onAuth(auth, session, cb) {
       const cred = queries.getCredentialById.get(auth.username) as
-        | { password_hash: string; enabled: number; user_sub: string; id: string; name: string }
+        | { password_hash: string; enabled: number; user_sub: string; id: string; name: string; allowed_user_sub: string | null }
         | undefined;
       if (!cred || !cred.enabled) {
         return cb(new Error('invalid credentials'));
@@ -28,6 +28,7 @@ export function startSmtpServer() {
         if (!ok) return cb(new Error('invalid credentials'));
         queries.updateCredentialStats.run(Date.now(), cred.id);
         (session as any).credentialName = cred.name;
+        (session as any).credentialAllowedUserSub = cred.allowed_user_sub ?? undefined;
         return cb(null, { user: cred.user_sub });
       } catch {
         queries.incrementCredentialError.run(cred.id);
@@ -38,6 +39,7 @@ export function startSmtpServer() {
       try {
         const parsed = await simpleParser(stream);
         const credName = (session as any).credentialName as string | undefined;
+        const credAllowedUserSub = (session as any).credentialAllowedUserSub as string | undefined;
         for (const rcpt of session.envelope.rcptTo) {
           const recipient = rcpt.address.toLowerCase().trim();
           const user = queries.userByEmail.get(recipient) as User | undefined;
@@ -45,6 +47,13 @@ export function startSmtpServer() {
             queries.insertEvent.run(
               nanoid(12), Date.now(), null, parsed.from?.text ?? '', recipient,
               parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user', credName ?? null, parsed.text ?? null,
+            );
+            continue;
+          }
+          if (credAllowedUserSub && credAllowedUserSub !== user.sub) {
+            queries.insertEvent.run(
+              nanoid(12), Date.now(), user.sub, parsed.from?.text ?? '', recipient,
+              parsed.subject ?? '(no subject)', null, null, 0, 0, 'credential_mismatch', credName ?? null, null,
             );
             continue;
           }
@@ -135,6 +144,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
         publicId: eventPublicId,
       });
       if (r.ok) delivered++; else failed++;
+      queries.insertDelivery.run(eventId, s.id, s.endpoint, s.user_agent, r.ok ? 'delivered' : 'failed', r.statusCode ?? null, Date.now());
     }),
   );
 

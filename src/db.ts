@@ -171,6 +171,32 @@ if (version < 5) {
   db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(5, Date.now());
 }
 
+if (version < 6) {
+  // Allow credentials to be restricted to a single recipient user
+  try {
+    db.exec(`ALTER TABLE smtp_credentials ADD COLUMN allowed_user_sub TEXT`);
+  } catch { /* column may already exist */ }
+  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(6, Date.now());
+}
+
+if (version < 7) {
+  // Per-device push delivery tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_deliveries (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      sub_id      TEXT NOT NULL,
+      endpoint    TEXT NOT NULL,
+      user_agent  TEXT,
+      status      TEXT NOT NULL,
+      status_code INTEGER,
+      ts          INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_deliveries_event ON event_deliveries(event_id);
+  `);
+  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(7, Date.now());
+}
+
 // ── Prepared Statements ───────────────────────────────────────────────────
 
 export const queries = {
@@ -209,6 +235,8 @@ export const queries = {
   delRule: db.prepare('DELETE FROM rules WHERE id = ? AND user_sub = ?'),
   toggleRule: db.prepare('UPDATE rules SET enabled = ? WHERE id = ? AND user_sub = ?'),
   shiftRulePositions: db.prepare('UPDATE rules SET position = position - 1 WHERE user_sub = ? AND position > ?'),
+  getRuleByPosition: db.prepare('SELECT * FROM rules WHERE user_sub = ? AND position = ?'),
+  swapRulePositions: db.prepare('UPDATE rules SET position = CASE id WHEN ? THEN ? WHEN ? THEN ? END WHERE id IN (?, ?)'),
 
   // Events
   insertEvent: db.prepare(`
@@ -218,9 +246,18 @@ export const queries = {
   getEventByPublicId: db.prepare('SELECT * FROM events WHERE public_id = ?'),
   listEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? AND id > ? ORDER BY ts DESC LIMIT ?'),
   listAllEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? ORDER BY ts DESC LIMIT ?'),
+  listEventsBefore: db.prepare('SELECT * FROM events WHERE user_sub = ? AND id < ? ORDER BY ts DESC LIMIT ?'),
   listEventsByCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id > ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
   listAllEventsByCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
+  listEventsBeforeByCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id < ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
+  listEventsByStatus: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id > ? AND status = ? ORDER BY ts DESC LIMIT ?"),
+  listAllEventsByStatus: db.prepare("SELECT * FROM events WHERE user_sub = ? AND status = ? ORDER BY ts DESC LIMIT ?"),
+  listEventsBeforeByStatus: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id < ? AND status = ? ORDER BY ts DESC LIMIT ?"),
+  listEventsByStatusAndCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id > ? AND status = ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
+  listAllEventsByStatusAndCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND status = ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
+  listEventsBeforeByStatusAndCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id < ? AND status = ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
   listUnmatchedEvents: db.prepare("SELECT * FROM events WHERE status = 'no_user' ORDER BY ts DESC LIMIT ?"),
+  cleanOldEvents: db.prepare('DELETE FROM events WHERE ts < ?'),
   countEvents7d: db.prepare('SELECT COUNT(*) as c FROM events WHERE user_sub = ? AND ts > ?'),
   lastEventTs: db.prepare('SELECT MAX(ts) as ts FROM events WHERE user_sub = ?'),
   updateEventCounts: db.prepare('UPDATE events SET delivered_count = ?, failed_count = ?, status = ? WHERE id = ?'),
@@ -238,10 +275,17 @@ export const queries = {
     ON CONFLICT(user_sub, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `),
 
+  // Event deliveries (per-device)
+  insertDelivery: db.prepare(`
+    INSERT INTO event_deliveries (event_id, sub_id, endpoint, user_agent, status, status_code, ts)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `),
+  listDeliveriesByEvent: db.prepare('SELECT * FROM event_deliveries WHERE event_id = ? ORDER BY ts ASC'),
+
   // SMTP credentials
   insertCredential: db.prepare(`
-    INSERT INTO smtp_credentials (id, user_sub, name, password_hash, enabled, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO smtp_credentials (id, user_sub, name, password_hash, enabled, created_at, allowed_user_sub)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `),
   getCredentialById: db.prepare('SELECT * FROM smtp_credentials WHERE id = ?'),
   listCredentials: db.prepare('SELECT * FROM smtp_credentials WHERE user_sub = ? ORDER BY created_at DESC'),

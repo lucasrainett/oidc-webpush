@@ -1,16 +1,4 @@
 allowBuilds:
-  '3': true
-  ',': true
-  '-': true
-  b: true
   better-sqlite3: true
-  d: true
-  e: true
   esbuild: true
-  i: true
-  l: true
-  q: true
-  r: true
-  s: true
-  t: true
-  u: true
+  sharp: true

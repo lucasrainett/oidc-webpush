@@ -237,6 +237,8 @@ main {
 .event.status-no_user   .status-pill,
 .event.status-no_devices .status-pill { background: rgba(232, 166, 71, 0.12); color: var(--warn); }
 .event.status-test      .status-pill { background: rgba(246, 166, 35, 0.12); color: var(--accent); }
+.event.status-ai_suppressed .status-pill      { background: rgba(255,255,255,0.04); color: var(--fg-faint); }
+.event.status-credential_mismatch .status-pill { background: rgba(214, 93, 93, 0.12); color: var(--err); }
 
 .events-scroll {
   max-height: 360px;
