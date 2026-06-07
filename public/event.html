@@ -95,7 +95,7 @@
     async function loadEvent() {
       try {
         console.log('[event] fetching public_id:', eventId);
-        const res = await fetch(`/api/events/${eventId}`);
+        const res = await fetch(`/api/events/${eventId}`, { credentials: 'include' });
         console.log('[event] response status:', res.status);
         if (res.status === 401 || res.status === 403) {
           card.innerHTML = '<div class="detail-error">session expired — <a href="/" style="color:var(--accent)">sign in</a></div>';
@@ -133,6 +133,7 @@
         document.getElementById('mute-btn').addEventListener('click', async () => {
           try {
             const muteRes = await fetch('/api/rules', {
+              credentials: 'include',
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
