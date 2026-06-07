@@ -17,7 +17,7 @@ import {
   destroySession,
 } from './auth.js';
 import { sendPush } from './push.js';
-import type { User, Subscription, Rule } from './types.js';
+import type { User, Subscription, Rule, Event } from './types.js';
 
 interface AuthedRequest extends FastifyRequest {
   user: User;

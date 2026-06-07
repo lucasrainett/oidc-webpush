@@ -44,6 +44,8 @@ export interface Event {
   delivered_count: number;
   failed_count: number;
   status: string;
+  credential_name: string | null;
+  body: string | null;
 }
 
 export interface Session {
