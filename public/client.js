@@ -39,11 +39,39 @@
   if (brandHost) brandHost.textContent = location.host;
 
   // ── Devices ───────────────────────────────────────────────────────────────
+  function parseDeviceName(ua) {
+    if (!ua) return 'unknown device';
+    const u = ua.toLowerCase();
+    let browser = 'browser';
+    if (u.includes('edg')) browser = 'Edge';
+    else if (u.includes('opr') || u.includes('opera')) browser = 'Opera';
+    else if (u.includes('chrome')) browser = 'Chrome';
+    else if (u.includes('firefox')) browser = 'Firefox';
+    else if (u.includes('safari')) browser = 'Safari';
+
+    let os = '';
+    if (u.includes('android')) os = 'Android';
+    else if (u.includes('iphone') || u.includes('ipad') || u.includes('ipod')) os = 'iOS';
+    else if (u.includes('macintosh') || u.includes('mac os x')) os = 'macOS';
+    else if (u.includes('windows')) os = 'Windows';
+    else if (u.includes('linux')) os = 'Linux';
+
+    return os ? `${browser} on ${os}` : browser;
+  }
+
   async function loadDevices() {
     try {
       const devices = await fetch('/api/devices').then(r => r.json());
       const container = document.getElementById('devices');
       if (!container) return;
+
+      let currentEndpoint = null;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) currentEndpoint = sub.endpoint;
+      } catch (e) { /* ignore */ }
+
       if (!devices.length) {
         container.innerHTML = '<div class="empty">no devices enrolled · click "enable on this device" below</div>';
         if (enableBtn) {
@@ -52,12 +80,16 @@
         }
         return;
       }
-      container.innerHTML = devices.map(s => `
-        <div class="row">
-          <span class="device-ua">${esc(s.user_agent ?? 'unknown')}</span>
+      container.innerHTML = devices.map(s => {
+        const isThisDevice = currentEndpoint && s.endpoint === currentEndpoint;
+        const name = parseDeviceName(s.user_agent);
+        const badge = isThisDevice ? ' <span class="meta" style="color:var(--accent)">· this device</span>' : '';
+        return `<div class="row" title="${esc(s.user_agent ?? '')}">
+          <span class="device-ua">${esc(name)}${badge}</span>
           <span class="meta">${relTime(s.last_seen)}</span>
           <button class="ghost" data-del-device="${esc(s.id)}">remove</button>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       container.querySelectorAll('[data-del-device]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const target = e.target;
@@ -160,7 +192,7 @@
           const res = await fetch('/api/subscribe', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, userAgent: navigator.userAgent.slice(0, 200) }),
+            body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, userAgent: parseDeviceName(navigator.userAgent) }),
           });
           console.log('[PUSH] server response:', res.status);
           if (!res.ok) {
