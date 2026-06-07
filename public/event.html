@@ -92,6 +92,12 @@
       return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+      );
+    }
+
     async function loadEvent() {
       console.log('[event] loadEvent start, id=', eventId);
       try {
