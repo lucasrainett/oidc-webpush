@@ -16,7 +16,7 @@ db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS schema_version (
-    version INTEGER PRIMARY KEY,
+    version    INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
   );
 
@@ -86,116 +86,47 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS smtp_credentials (
-    id            TEXT PRIMARY KEY,
-    user_sub      TEXT NOT NULL REFERENCES users(sub) ON DELETE CASCADE,
-    name          TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    enabled       INTEGER NOT NULL DEFAULT 1,
-    created_at    INTEGER NOT NULL,
-    last_used_at  INTEGER,
-    message_count INTEGER NOT NULL DEFAULT 0,
-    error_count   INTEGER NOT NULL DEFAULT 0
+    id               TEXT PRIMARY KEY,
+    user_sub         TEXT NOT NULL REFERENCES users(sub) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    password_hash    TEXT NOT NULL,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    created_at       INTEGER NOT NULL,
+    last_used_at     INTEGER,
+    message_count    INTEGER NOT NULL DEFAULT 0,
+    error_count      INTEGER NOT NULL DEFAULT 0,
+    allowed_user_sub TEXT
   );
 
-  CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_sub, ts DESC);
-  CREATE INDEX IF NOT EXISTS idx_rules_user   ON rules(user_sub, position);
-  CREATE INDEX IF NOT EXISTS idx_subs_user    ON subscriptions(user_sub);
+  CREATE TABLE IF NOT EXISTS event_deliveries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    sub_id      TEXT NOT NULL,
+    endpoint    TEXT NOT NULL,
+    user_agent  TEXT,
+    status      TEXT NOT NULL,
+    status_code INTEGER,
+    ts          INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_events_user      ON events(user_sub, ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_events_public_id ON events(public_id);
+  CREATE INDEX IF NOT EXISTS idx_rules_user       ON rules(user_sub, position);
+  CREATE INDEX IF NOT EXISTS idx_subs_user        ON subscriptions(user_sub);
+  CREATE INDEX IF NOT EXISTS idx_deliveries_event ON event_deliveries(event_id);
 `);
 
 // ── Migration bootstrap ─────────────────────────────────────────────────────
 
-const currentVersion = db.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number | null };
-const version = currentVersion?.v ?? 0;
+const currentVersion = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number | null }).v ?? 0;
 
-if (version < 1) {
+if (currentVersion < 1) {
+  // Baseline: schema created fresh, mark as current
   db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(1, Date.now());
 }
 
-if (version < 2) {
-  // Migrate subscriptions: drop old UNIQUE(endpoint), add UNIQUE(user_sub, endpoint)
-  db.exec(`
-    CREATE TABLE subscriptions_new (
-      id          TEXT PRIMARY KEY,
-      user_sub    TEXT NOT NULL REFERENCES users(sub) ON DELETE CASCADE,
-      endpoint    TEXT NOT NULL,
-      p256dh      TEXT NOT NULL,
-      auth        TEXT NOT NULL,
-      user_agent  TEXT,
-      created_at  INTEGER NOT NULL,
-      last_seen   INTEGER NOT NULL,
-      UNIQUE(user_sub, endpoint)
-    );
-    INSERT INTO subscriptions_new SELECT * FROM subscriptions;
-    DROP TABLE subscriptions;
-    ALTER TABLE subscriptions_new RENAME TO subscriptions;
-    CREATE INDEX idx_subs_user ON subscriptions(user_sub);
-  `);
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(2, Date.now());
-}
-
-if (version < 3) {
-  // Add credential_name column to events for filtering by app/source
-  try {
-    db.exec(`ALTER TABLE events ADD COLUMN credential_name TEXT`);
-  } catch {
-    // column may already exist
-  }
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(3, Date.now());
-}
-
-if (version < 4) {
-  // Add body column to events for full message content display
-  try {
-    db.exec(`ALTER TABLE events ADD COLUMN body TEXT`);
-  } catch {
-    // column may already exist
-  }
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(4, Date.now());
-}
-
-if (version < 5) {
-  // Add public_id for unguessable event URLs
-  const cols = db.prepare("PRAGMA table_info(events)").all() as { name: string }[];
-  const hasPublicId = cols.some((c) => c.name === 'public_id');
-  if (!hasPublicId) {
-    db.exec(`ALTER TABLE events ADD COLUMN public_id TEXT`);
-    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_id ON events(public_id)`);
-  }
-  // Generate public_ids for existing events that don't have one
-  const { nanoid } = await import('nanoid');
-  const eventsWithoutPublicId = db.prepare("SELECT id FROM events WHERE public_id IS NULL").all() as { id: number }[];
-  const updateStmt = db.prepare("UPDATE events SET public_id = ? WHERE id = ?");
-  for (const ev of eventsWithoutPublicId) {
-    updateStmt.run(nanoid(12), ev.id);
-  }
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(5, Date.now());
-}
-
-if (version < 6) {
-  // Allow credentials to be restricted to a single recipient user
-  try {
-    db.exec(`ALTER TABLE smtp_credentials ADD COLUMN allowed_user_sub TEXT`);
-  } catch { /* column may already exist */ }
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(6, Date.now());
-}
-
-if (version < 7) {
-  // Per-device push delivery tracking
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS event_deliveries (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      sub_id      TEXT NOT NULL,
-      endpoint    TEXT NOT NULL,
-      user_agent  TEXT,
-      status      TEXT NOT NULL,
-      status_code INTEGER,
-      ts          INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_deliveries_event ON event_deliveries(event_id);
-  `);
-  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(7, Date.now());
-}
+// Future migrations go here:
+// if (currentVersion < 2) { ... }
 
 // ── Prepared Statements ───────────────────────────────────────────────────
 

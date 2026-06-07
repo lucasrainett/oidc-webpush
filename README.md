@@ -66,7 +66,7 @@ Every user authenticates through your existing **OIDC identity provider** (Authe
 ### One-line install (recommended)
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpush/main/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpush/master/install.sh)"
 ```
 
 The script:
@@ -89,7 +89,7 @@ export OIDC_CLIENT_SECRET="my-secret"
 export ADMIN_EMAILS="admin@example.com"
 export NONINTERACTIVE=1
 
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpush/main/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/lucasrainett/oidc-webpush/master/install.sh)"
 ```
 
 ### Update an existing installation
@@ -101,7 +101,6 @@ Run the same command again — it detects the existing installation, pulls the l
 ```bash
 git clone https://github.com/lucasrainett/oidc-webpush.git && cd oidc-webpush
 pnpm install
-pnpm run gen-icons   # generate PWA icons
 pnpm run build
 pnpm run gen-vapid   # save output to .env
 
@@ -289,9 +288,12 @@ All endpoints return JSON except `/api/vapid-public-key` (plain text) and static
 
 ## Security
 
+> **⚠ Do not expose the SMTP port to the public internet.**
+> The SMTP server has no TLS support and is designed to run on a private, trusted network only (e.g. a local LAN or a WireGuard/VPN segment). Accepting unauthenticated or internet-facing SMTP traffic would expose credentials in plaintext and allow spam injection. Bind `SMTP_HOST` to a private interface and firewall the port accordingly.
+
 - **Authentication**: OIDC only. No local accounts.
 - **Sessions**: Server-side SQLite storage, 7-day expiry, HttpOnly `SameSite=Lax` cookies.
-- **SMTP**: Mandatory authentication with Argon2id-hashed credentials. No unauthenticated mail accepted.
+- **SMTP**: Mandatory authentication with Argon2id-hashed credentials, but **no encryption** — trusted network only.
 - **Push**: VAPID-authenticated Web Push. Treat VAPID keys like TLS certificates.
 - **AI Privacy**: All inference on your local Ollama instance. No data leaves your network.
 
@@ -303,7 +305,6 @@ All endpoints return JSON except `/api/vapid-public-key` (plain text) and static
 git clone https://github.com/lucasrainett/oidc-webpush.git
 cd oidc-webpush
 pnpm install
-pnpm run gen-icons   # generate public/icons/*.png
 pnpm run dev         # tsx watch mode
 ```
 
@@ -338,8 +339,7 @@ public/
   manifest.json # PWA manifest
   event.html    # Notification detail / mute page
 scripts/
-  gen-icons.mjs # SVG → PNG icon generation
-  gen-vapid.mjs # VAPID key generation helper
+  test-smtp.mjs # SMTP connectivity testing helper
 ```
 
 ---
