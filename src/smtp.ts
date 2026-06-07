@@ -5,7 +5,7 @@ import { simpleParser } from 'mailparser';
 import { verify } from '@node-rs/argon2';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
-import { db, queries } from './db.js';
+import { queries } from './db.js';
 import { evalRules } from './rules.js';
 import { sendPush } from './push.js';
 import { callOllama, matchesBypassPattern, matchesSkipPattern } from './ai.js';

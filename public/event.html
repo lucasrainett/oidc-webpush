@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0e0f12">
-  <title>Alert</title>
+  <title>oidc-webpush</title>
   <link rel="stylesheet" href="/style.css">
   <style>
     html, body { height: 100%; }
@@ -99,18 +99,14 @@
     }
 
     async function loadEvent() {
-      console.log('[event] loadEvent start, id=', eventId);
       try {
-        console.log('[event] fetching public_id:', eventId);
         let res;
         try {
           res = await fetch(`/api/events/${eventId}`, { credentials: 'include' });
         } catch (fetchErr) {
-          console.error('[event] fetch threw:', fetchErr);
           card.innerHTML = '<div class="detail-error">fetch error: ' + esc(fetchErr.message) + '</div>';
           return;
         }
-        console.log('[event] response status:', res.status);
         if (res.status === 401 || res.status === 403) {
           card.innerHTML = '<div class="detail-error">session expired — <a href="/" style="color:var(--accent)">sign in</a></div>';
           return;
@@ -118,7 +114,6 @@
         if (!res.ok) {
           let errText = 'unknown error';
           try { errText = await res.text(); } catch (e) { /* ignore */ }
-          console.error('[event] fetch failed:', res.status, errText);
           card.innerHTML = '<div class="detail-error">not found (' + res.status + ')</div>';
           return;
         }
@@ -126,14 +121,11 @@
         let ev;
         try {
           ev = await res.json();
-          console.log('[event] json parsed, keys:', Object.keys(ev));
         } catch (jsonErr) {
-          console.error('[event] json parse failed:', jsonErr);
           card.innerHTML = '<div class="detail-error">invalid response</div>';
           return;
         }
 
-        console.log('[event] building html, subject:', ev.subject);
         try {
           card.innerHTML = `
             <div class="detail-label">${esc(new Date(ev.ts).toLocaleString())}</div>
@@ -155,16 +147,12 @@
               <button class="ghost" id="dismiss-btn">dismiss</button>
             </div>
           `;
-          console.log('[event] html inserted');
         } catch (htmlErr) {
-          console.error('[event] html insert failed:', htmlErr);
           card.innerHTML = '<div class="detail-error">render error</div>';
           return;
         }
 
-        console.log('[event] attaching listeners');
         document.getElementById('mute-btn').addEventListener('click', async () => {
-          console.log('[event] mute clicked');
           try {
             const muteRes = await fetch('/api/rules', {
               credentials: 'include',
@@ -177,24 +165,19 @@
                 enabled: true,
               }),
             });
-            console.log('[event] mute response:', muteRes.status);
             if (!muteRes.ok) throw new Error('unauthorized');
             card.innerHTML = '<div class="detail-done">muted ' + esc(ev.from_addr) + '</div>';
             setTimeout(() => { window.location.href = '/'; }, 1500);
           } catch (muteErr) {
-            console.error('[event] mute failed:', muteErr);
             card.innerHTML = '<div class="detail-error">failed to mute — try from the app</div>';
           }
         });
 
         document.getElementById('dismiss-btn').addEventListener('click', () => {
-          console.log('[event] dismiss clicked');
           window.close();
           window.location.href = '/';
         });
-        console.log('[event] loadEvent complete');
       } catch (err) {
-        console.error('[event] outer catch:', err);
         card.innerHTML = '<div class="detail-error">failed to load: ' + esc(err.message) + '</div>';
       }
     }

@@ -113,7 +113,6 @@
         try {
           const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
           await navigator.serviceWorker.ready;
-          console.log('[CLIENT] SW registered, state:', reg.installing ? 'installing' : reg.waiting ? 'waiting' : 'active');
 
           // Check if already subscribed
           const existing = await reg.pushManager.getSubscription();
@@ -124,10 +123,8 @@
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (newWorker) {
-              console.log('[CLIENT] new SW installing');
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'activated') {
-                  console.log('[CLIENT] new SW activated, reloading...');
                   window.location.reload();
                 }
               });
@@ -135,7 +132,6 @@
           });
           reg.update();
         } catch (err) {
-          console.error('[CLIENT] SW registration failed:', err);
           enableBtn.disabled = true;
           enableBtn.textContent = 'service worker failed';
         }
@@ -145,22 +141,15 @@
         const originalText = enableBtn.textContent;
         enableBtn.textContent = 'enabling…';
         try {
-          console.log('[PUSH] requesting permission...');
           const perm = await Notification.requestPermission();
-          console.log('[PUSH] permission:', perm);
           if (perm !== 'granted') throw new Error('permission denied');
 
-          console.log('[PUSH] fetching vapid key...');
           const vapidKey = await fetch('/api/vapid-public-key').then(r => r.text());
-          console.log('[PUSH] vapid key received');
 
           const reg = await navigator.serviceWorker.ready;
-          console.log('[PUSH] checking existing subscription...');
           let sub = await reg.pushManager.getSubscription();
-          console.log('[PUSH] getSubscription result:', sub ? 'exists' : 'null');
 
           if (!sub) {
-            console.log('[PUSH] no existing subscription, subscribing...');
             try {
               const subscribePromise = reg.pushManager.subscribe({
                 userVisibleOnly: true,
@@ -170,40 +159,26 @@
                 setTimeout(() => reject(new Error('subscribe timed out')), 30_000);
               });
               sub = await Promise.race([subscribePromise, timeoutPromise]);
-              console.log('[PUSH] subscribe returned');
             } catch (subscribeErr) {
-              console.log('[PUSH] subscribe failed or timed out, checking again...');
               sub = await reg.pushManager.getSubscription();
-              if (sub) {
-                console.log('[PUSH] subscription exists after timeout, using it');
-              } else {
-                throw subscribeErr;
-              }
+              if (!sub) throw subscribeErr;
             }
-          } else {
-            console.log('[PUSH] existing subscription found, reusing for this user');
           }
 
-          console.log('[PUSH] subscription:', sub ? 'success' : 'null');
           const json = sub.toJSON();
-          console.log('[PUSH] endpoint:', json.endpoint.slice(0, 60) + '...');
 
-          console.log('[PUSH] sending to server...');
           const res = await fetch('/api/subscribe', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, userAgent: parseDeviceName(navigator.userAgent) }),
           });
-          console.log('[PUSH] server response:', res.status);
           if (!res.ok) {
             const errText = await res.text().catch(() => 'unknown error');
             throw new Error('subscribe failed: ' + res.status + ' ' + errText);
           }
           loadDevices();
           enableBtn.textContent = 'push enabled on this account';
-          console.log('[PUSH] complete');
         } catch (err) {
-          console.error('[PUSH] error:', err);
           enableBtn.textContent = originalText || 'enable on this device';
           alert('could not enable push: ' + (err.message || String(err)));
         }
@@ -288,7 +263,7 @@
         body: JSON.stringify(body),
       });
       target.reset();
-      ruleForm.style.display = 'none';
+      ruleForm.classList.remove('open');
       loadRules();
     });
   }
@@ -390,7 +365,6 @@
     try {
       const users = await fetch('/api/admin/users').then(r => r.json());
       const select = document.getElementById('impersonate-select');
-      const credSelect = document.getElementById('cred-user-select');
       if (select) {
         select.innerHTML = '<option value="">view as user...</option>';
         for (const u of users) {
@@ -399,15 +373,6 @@
           opt.value = u.sub;
           opt.textContent = `${u.email} ${u.is_admin ? '(admin)' : ''}`;
           select.appendChild(opt);
-        }
-      }
-      if (credSelect) {
-        credSelect.innerHTML = '<option value="">select user...</option>';
-        for (const u of users) {
-          const opt = document.createElement('option');
-          opt.value = u.sub;
-          opt.textContent = u.email;
-          credSelect.appendChild(opt);
         }
       }
       // Populate app_name dropdown from credential names

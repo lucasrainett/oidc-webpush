@@ -1,7 +1,4 @@
 // oidc-webpush service worker — receives push events and renders notifications.
-// v2 — with action buttons (mute, open)
-
-console.log('[SW] installing v2');
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -9,22 +6,16 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
-  console.log('[SW] activated v2');
 });
 
 self.addEventListener('push', (event) => {
-  console.log('[SW] push event received');
   let data = {};
   try { data = event.data ? event.data.json() : {}; }
   catch { data = { title: 'oidc-webpush', body: event.data ? event.data.text() : '' }; }
 
-  console.log('[SW] push payload keys:', Object.keys(data));
-  console.log('[SW] push payload publicId:', data.publicId);
-
   const title = data.title || 'oidc-webpush';
   const priority = data.priority || 3;
   const url = data.publicId ? '/event.html?id=' + data.publicId : '/';
-  console.log('[SW] notification URL:', url);
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
@@ -39,7 +30,6 @@ self.addEventListener('push', (event) => {
       { action: 'open', title: 'Open' },
     ],
   };
-  console.log('[SW] showing notification');
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
