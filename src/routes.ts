@@ -34,13 +34,18 @@ export async function registerRoutes(app: FastifyInstance) {
     if (req.url.startsWith('/auth/') || PUBLIC_PATHS.has(req.url) || req.url.startsWith('/icons/')) return;
 
     const sid = req.cookies.sid;
+    req.log.debug({ url: req.url, hasSid: !!sid }, 'auth gate check');
     const session = sid ? (getSession(sid)) : undefined;
     if (!session) {
+      req.log.warn({ url: req.url }, 'no session, returning 401');
       if (req.method === 'GET' && (req.url === '/' || req.url === '')) return reply.redirect('/auth/login');
       return reply.code(401).send({ error: 'unauthorized' });
     }
     const user = queries.userBySub.get(session.user_sub) as User | undefined;
-    if (!user) return reply.code(401).send({ error: 'user not found' });
+    if (!user) {
+      req.log.warn({ url: req.url, userSub: session.user_sub }, 'user not found');
+      return reply.code(401).send({ error: 'user not found' });
+    }
 
     // admin impersonation (skip for admin API routes so admin can manage)
     const impersonating = req.cookies.impersonate;
@@ -241,10 +246,18 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get('/api/events/:publicId', async (req, reply) => {
     const u = (req as AuthedRequest).user;
     const publicId = (req.params as { publicId: string }).publicId;
+    req.log.info({ publicId, userSub: u.sub }, 'GET /api/events/:publicId');
     if (!publicId) return reply.code(400).send({ error: 'invalid id' });
     const ev = queries.getEventByPublicId.get(publicId) as Event | undefined;
-    if (!ev) return reply.code(404).send({ error: 'not found' });
-    if (ev.user_sub !== u.sub) return reply.code(403).send({ error: 'forbidden' });
+    if (!ev) {
+      req.log.warn({ publicId }, 'event not found');
+      return reply.code(404).send({ error: 'not found' });
+    }
+    if (ev.user_sub !== u.sub) {
+      req.log.warn({ publicId, eventUser: ev.user_sub, requestUser: u.sub }, 'event ownership mismatch');
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+    req.log.info({ publicId }, 'event found, returning');
     return ev;
   });
 
