@@ -123,17 +123,18 @@
           console.log('[PUSH] vapid key received');
 
           const reg = await navigator.serviceWorker.ready;
-          console.log('[PUSH] subscribing...');
+          console.log('[PUSH] checking existing subscription...');
+          let sub = await reg.pushManager.getSubscription();
 
-          // Set a timeout in case subscribe() hangs
-          const subscribePromise = reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
-          });
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('subscribe timed out after 10s — browser may already have a subscription for another account')), 10_000);
-          });
-          const sub = await Promise.race([subscribePromise, timeoutPromise]);
+          if (!sub) {
+            console.log('[PUSH] no existing subscription, subscribing...');
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
+            });
+          } else {
+            console.log('[PUSH] existing subscription found, reusing for this user');
+          }
 
           console.log('[PUSH] subscription:', sub ? 'success' : 'null');
           const json = sub.toJSON();
