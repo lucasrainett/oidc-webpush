@@ -132,6 +132,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
         tag,
         ts: Date.now(),
         eventId,
+        publicId: eventPublicId,
       });
       if (r.ok) delivered++; else failed++;
     }),

@@ -129,15 +129,25 @@
 
           if (!sub) {
             console.log('[PUSH] no existing subscription, subscribing...');
-            const subscribePromise = reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
-            });
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('subscribe timed out after 15s')), 15_000);
-            });
-            sub = await Promise.race([subscribePromise, timeoutPromise]);
-            console.log('[PUSH] subscribe returned');
+            try {
+              const subscribePromise = reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
+              });
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('subscribe timed out')), 30_000);
+              });
+              sub = await Promise.race([subscribePromise, timeoutPromise]);
+              console.log('[PUSH] subscribe returned');
+            } catch (subscribeErr) {
+              console.log('[PUSH] subscribe failed or timed out, checking again...');
+              sub = await reg.pushManager.getSubscription();
+              if (sub) {
+                console.log('[PUSH] subscription exists after timeout, using it');
+              } else {
+                throw subscribeErr;
+              }
+            }
           } else {
             console.log('[PUSH] existing subscription found, reusing for this user');
           }
