@@ -82,6 +82,13 @@
           const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
           await navigator.serviceWorker.ready;
           console.log('[CLIENT] SW registered, state:', reg.installing ? 'installing' : reg.waiting ? 'waiting' : 'active');
+
+          // Check if already subscribed
+          const existing = await reg.pushManager.getSubscription();
+          if (existing) {
+            enableBtn.textContent = 'push enabled on this device';
+          }
+
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (newWorker) {
@@ -94,7 +101,6 @@
               });
             }
           });
-          // force update check on every page load
           reg.update();
         } catch (err) {
           console.error('[CLIENT] SW registration failed:', err);
@@ -107,28 +113,48 @@
         const originalText = enableBtn.textContent;
         enableBtn.textContent = 'enabling…';
         try {
+          console.log('[PUSH] requesting permission...');
           const perm = await Notification.requestPermission();
+          console.log('[PUSH] permission:', perm);
           if (perm !== 'granted') throw new Error('permission denied');
+
+          console.log('[PUSH] fetching vapid key...');
           const vapidKey = await fetch('/api/vapid-public-key').then(r => r.text());
+          console.log('[PUSH] vapid key received');
+
           const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.subscribe({
+          console.log('[PUSH] subscribing...');
+
+          // Set a timeout in case subscribe() hangs
+          const subscribePromise = reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
           });
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('subscribe timed out after 10s — browser may already have a subscription for another account')), 10_000);
+          });
+          const sub = await Promise.race([subscribePromise, timeoutPromise]);
+
+          console.log('[PUSH] subscription:', sub ? 'success' : 'null');
           const json = sub.toJSON();
+          console.log('[PUSH] endpoint:', json.endpoint.slice(0, 60) + '...');
+
+          console.log('[PUSH] sending to server...');
           const res = await fetch('/api/subscribe', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, userAgent: navigator.userAgent.slice(0, 200) }),
           });
+          console.log('[PUSH] server response:', res.status);
           if (!res.ok) {
             const errText = await res.text().catch(() => 'unknown error');
             throw new Error('subscribe failed: ' + res.status + ' ' + errText);
           }
           loadDevices();
           enableBtn.textContent = 'push enabled on this account';
+          console.log('[PUSH] complete');
         } catch (err) {
-          console.error(err);
+          console.error('[PUSH] error:', err);
           enableBtn.textContent = originalText || 'enable on this device';
           alert('could not enable push: ' + (err.message || String(err)));
         }
