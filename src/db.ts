@@ -155,10 +155,11 @@ if (version < 4) {
 
 if (version < 5) {
   // Add public_id for unguessable event URLs
-  try {
-    db.exec(`ALTER TABLE events ADD COLUMN public_id TEXT UNIQUE`);
-  } catch {
-    // column may already exist
+  const cols = db.prepare("PRAGMA table_info(events)").all() as { name: string }[];
+  const hasPublicId = cols.some((c) => c.name === 'public_id');
+  if (!hasPublicId) {
+    db.exec(`ALTER TABLE events ADD COLUMN public_id TEXT`);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_id ON events(public_id)`);
   }
   // Generate public_ids for existing events that don't have one
   const { nanoid } = await import('nanoid');
