@@ -190,6 +190,7 @@
         document.getElementById('dismiss-btn').addEventListener('click', () => {
           console.log('[event] dismiss clicked');
           window.close();
+          window.location.href = '/';
         });
         console.log('[event] loadEvent complete');
       } catch (err) {
