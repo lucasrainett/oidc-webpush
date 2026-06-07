@@ -55,6 +55,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS events (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id       TEXT UNIQUE,
     ts              INTEGER NOT NULL,
     user_sub        TEXT,
     from_addr       TEXT,
@@ -152,6 +153,23 @@ if (version < 4) {
   db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(4, Date.now());
 }
 
+if (version < 5) {
+  // Add public_id for unguessable event URLs
+  try {
+    db.exec(`ALTER TABLE events ADD COLUMN public_id TEXT UNIQUE`);
+  } catch {
+    // column may already exist
+  }
+  // Generate public_ids for existing events that don't have one
+  const { nanoid } = await import('nanoid');
+  const eventsWithoutPublicId = db.prepare("SELECT id FROM events WHERE public_id IS NULL").all() as { id: number }[];
+  const updateStmt = db.prepare("UPDATE events SET public_id = ? WHERE id = ?");
+  for (const ev of eventsWithoutPublicId) {
+    updateStmt.run(nanoid(12), ev.id);
+  }
+  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(5, Date.now());
+}
+
 // ── Prepared Statements ───────────────────────────────────────────────────
 
 export const queries = {
@@ -193,10 +211,10 @@ export const queries = {
 
   // Events
   insertEvent: db.prepare(`
-    INSERT INTO events (ts, user_sub, from_addr, to_addr, subject, matched_rule, action_taken, delivered_count, failed_count, status, credential_name, body)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO events (public_id, ts, user_sub, from_addr, to_addr, subject, matched_rule, action_taken, delivered_count, failed_count, status, credential_name, body)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
-  getEventById: db.prepare('SELECT * FROM events WHERE id = ?'),
+  getEventByPublicId: db.prepare('SELECT * FROM events WHERE public_id = ?'),
   listEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? AND id > ? ORDER BY ts DESC LIMIT ?'),
   listAllEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? ORDER BY ts DESC LIMIT ?'),
   listEventsByCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id > ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),

@@ -34,6 +34,7 @@ export interface Rule {
 
 export interface Event {
   id: number;
+  public_id: string | null;
   ts: number;
   user_sub: string | null;
   from_addr: string | null;

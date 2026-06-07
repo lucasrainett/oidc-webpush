@@ -94,13 +94,17 @@
 
     async function loadEvent() {
       try {
+        console.log('[event] fetching public_id:', eventId);
         const res = await fetch(`/api/events/${eventId}`);
+        console.log('[event] response status:', res.status);
         if (res.status === 401 || res.status === 403) {
           card.innerHTML = '<div class="detail-error">session expired — <a href="/" style="color:var(--accent)">sign in</a></div>';
           return;
         }
         if (!res.ok) {
-          card.innerHTML = '<div class="detail-error">not found</div>';
+          const errText = await res.text().catch(() => 'unknown error');
+          console.error('[event] fetch failed:', res.status, errText);
+          card.innerHTML = '<div class="detail-error">not found (' + res.status + ')</div>';
           return;
         }
         const ev = await res.json();

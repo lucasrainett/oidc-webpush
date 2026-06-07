@@ -121,7 +121,10 @@
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, userAgent: navigator.userAgent.slice(0, 200) }),
           });
-          if (!res.ok) throw new Error('subscribe failed');
+          if (!res.ok) {
+            const errText = await res.text().catch(() => 'unknown error');
+            throw new Error('subscribe failed: ' + res.status + ' ' + errText);
+          }
           loadDevices();
           enableBtn.textContent = 'push enabled on this account';
         } catch (err) {
@@ -242,7 +245,7 @@
         return;
       }
       const html = events.map(ev => `
-        <div class="row event status-${esc(ev.status)}" style="cursor:pointer" data-event-id="${ev.id}">
+        <div class="row event status-${esc(ev.status)}" style="cursor:pointer" data-event-id="${esc(ev.public_id)}">
           <span class="ts">${esc(new Date(ev.ts).toLocaleString())}</span>
           <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}${ev.credential_name ? ' [' + esc(ev.credential_name) + ']' : ''}</span>
           <span class="subject">${esc((ev.subject ?? '').slice(0, 64))}</span>

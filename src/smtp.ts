@@ -3,6 +3,7 @@
 import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import { verify } from '@node-rs/argon2';
+import { nanoid } from 'nanoid';
 import { config } from './config.js';
 import { db, queries } from './db.js';
 import { evalRules } from './rules.js';
@@ -42,7 +43,7 @@ export function startSmtpServer() {
           const user = queries.userByEmail.get(recipient) as User | undefined;
           if (!user) {
             queries.insertEvent.run(
-              Date.now(), null, parsed.from?.text ?? '', recipient,
+              nanoid(12), Date.now(), null, parsed.from?.text ?? '', recipient,
               parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user', credName ?? null, parsed.text ?? null,
             );
             continue;
@@ -72,7 +73,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
 
   if (matched?.action === 'mute') {
     queries.insertEvent.run(
-      Date.now(), user.sub, from, recipient, subject,
+      nanoid(12), Date.now(), user.sub, from, recipient, subject,
       matched.id, 'mute', 0, 0, 'muted', credName ?? null, body,
     );
     return;
@@ -93,7 +94,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
 
   if (aiResult && aiResult.relevant === false) {
     queries.insertEvent.run(
-      Date.now(), user.sub, from, recipient, subject,
+      nanoid(12), Date.now(), user.sub, from, recipient, subject,
       matched?.id ?? null, 'ai_skip', 0, 0, 'ai_suppressed', credName ?? null, body,
     );
     return;
@@ -112,8 +113,9 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
 
   const subs = queries.listSubs.all(user.sub) as import('./types.js').Subscription[];
   const initialStatus = subs.length === 0 ? 'no_devices' : 'pending';
+  const eventPublicId = nanoid(12);
   const insertResult = queries.insertEvent.run(
-    Date.now(), user.sub, from, recipient, subject,
+    eventPublicId, Date.now(), user.sub, from, recipient, subject,
     matched?.id ?? null, matched?.action ?? null,
     0, 0, initialStatus, credName ?? null, body,
   );
