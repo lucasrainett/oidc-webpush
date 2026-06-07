@@ -238,17 +238,29 @@ export async function registerRoutes(app: FastifyInstance) {
     return queries.listAllEvents.all(u.sub, 50) as any[];
   });
 
+  app.get('/api/events/:id', async (req, reply) => {
+    const u = (req as AuthedRequest).user;
+    const eventId = Number((req.params as { id: string }).id);
+    if (!eventId) return reply.code(400).send({ error: 'invalid id' });
+    const ev = queries.getEventById.get(eventId) as Event | undefined;
+    if (!ev) return reply.code(404).send({ error: 'not found' });
+    if (ev.user_sub !== u.sub) return reply.code(403).send({ error: 'forbidden' });
+    return ev;
+  });
+
   // ── Test push ─────────────────────────────────────────────────────────────
   app.post('/api/test', async (req, reply) => {
     const u = (req as AuthedRequest).user;
     const subs = queries.listSubs.all(u.sub) as Subscription[];
     if (subs.length === 0) return reply.code(400).send({ error: 'no devices enrolled' });
+    const testBody = `Hello ${u.display_name ?? u.email}, push is working.`;
+    const insertResult = queries.insertEvent.run(Date.now(), u.sub, '[test]', u.email, 'Test notification', null, 'test', 0, subs.length, 'test', null, testBody);
+    const eventId = Number(insertResult.lastInsertRowid);
     let delivered = 0;
     await Promise.all(subs.map(async (s) => {
-      const r = await sendPush(s, { title: 'Test notification', body: `Hello ${u.display_name ?? u.email}, push is working.`, ts: Date.now() });
+      const r = await sendPush(s, { title: 'Test notification', body: testBody, ts: Date.now(), eventId });
       if (r.ok) delivered++;
     }));
-    queries.insertEvent.run(Date.now(), u.sub, '[test]', u.email, 'Test notification', null, 'test', delivered, subs.length - delivered, 'test', null);
     return { sent: delivered, total: subs.length };
   });
 

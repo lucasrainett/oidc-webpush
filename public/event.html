@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0f12">
+  <title>Alert</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    html, body { height: 100%; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: var(--bg);
+    }
+    .detail-card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px;
+    }
+    .detail-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--fg-dim);
+      margin-bottom: 16px;
+    }
+    .detail-field {
+      margin-bottom: 16px;
+    }
+    .detail-field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-faint);
+      margin-bottom: 4px;
+    }
+    .detail-field .value {
+      font-size: 14px;
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .detail-body {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--fg);
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 24px;
+    }
+    .detail-actions {
+      display: flex;
+      gap: 12px;
+    }
+    .detail-actions button { flex: 1; }
+    .detail-error {
+      text-align: center;
+      color: var(--err);
+      font-family: var(--mono);
+      font-size: 14px;
+    }
+    .detail-done {
+      text-align: center;
+      color: var(--ok);
+      font-family: var(--mono);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="detail-card" id="detail-card">
+    <div class="detail-label" id="status-label">loading…</div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const eventId = params.get('id');
+    const card = document.getElementById('detail-card');
+
+    function escapeRegex(str) {
+      return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    async function loadEvent() {
+      try {
+        const res = await fetch(`/api/events/${eventId}`);
+        if (res.status === 401 || res.status === 403) {
+          card.innerHTML = '<div class="detail-error">session expired — <a href="/" style="color:var(--accent)">sign in</a></div>';
+          return;
+        }
+        if (!res.ok) {
+          card.innerHTML = '<div class="detail-error">not found</div>';
+          return;
+        }
+        const ev = await res.json();
+
+        card.innerHTML = `
+          <div class="detail-label">${esc(new Date(ev.ts).toLocaleString())}</div>
+          <div class="detail-field">
+            <label>from</label>
+            <div class="value">${esc(ev.from_addr)}</div>
+          </div>
+          <div class="detail-field">
+            <label>to</label>
+            <div class="value">${esc(ev.to_addr)}</div>
+          </div>
+          <div class="detail-field">
+            <label>subject</label>
+            <div class="value">${esc(ev.subject)}</div>
+          </div>
+          <div class="detail-body">${esc(ev.body || '(no body)')}</div>
+          <div class="detail-actions">
+            <button class="primary" id="mute-btn">mute sender</button>
+            <button class="ghost" id="dismiss-btn">dismiss</button>
+          </div>
+        `;
+
+        document.getElementById('mute-btn').addEventListener('click', async () => {
+          try {
+            const muteRes = await fetch('/api/rules', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                match_field: 'from',
+                match_pattern: '^' + escapeRegex(ev.from_addr) + '$',
+                action: 'mute',
+                enabled: true,
+              }),
+            });
+            if (!muteRes.ok) throw new Error('unauthorized');
+            card.innerHTML = '<div class="detail-done">muted ' + esc(ev.from_addr) + '</div>';
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+          } catch {
+            card.innerHTML = '<div class="detail-error">failed to mute — try from the app</div>';
+          }
+        });
+
+        document.getElementById('dismiss-btn').addEventListener('click', () => {
+          window.location.href = '/';
+        });
+      } catch (err) {
+        console.error(err);
+        card.innerHTML = '<div class="detail-error">failed to load</div>';
+      }
+    }
+
+    if (!eventId) {
+      card.innerHTML = '<div class="detail-error">missing event id</div>';
+    } else {
+      loadEvent();
+    }
+  </script>
+</body>
+</html>

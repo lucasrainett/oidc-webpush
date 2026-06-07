@@ -43,7 +43,7 @@ export function startSmtpServer() {
           if (!user) {
             queries.insertEvent.run(
               Date.now(), null, parsed.from?.text ?? '', recipient,
-              parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user', credName ?? null,
+              parsed.subject ?? '(no subject)', null, null, 0, 0, 'no_user', credName ?? null, parsed.text ?? null,
             );
             continue;
           }
@@ -73,7 +73,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
   if (matched?.action === 'mute') {
     queries.insertEvent.run(
       Date.now(), user.sub, from, recipient, subject,
-      matched.id, 'mute', 0, 0, 'muted', credName ?? null,
+      matched.id, 'mute', 0, 0, 'muted', credName ?? null, body,
     );
     return;
   }
@@ -94,7 +94,7 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
   if (aiResult && aiResult.relevant === false) {
     queries.insertEvent.run(
       Date.now(), user.sub, from, recipient, subject,
-      matched?.id ?? null, 'ai_skip', 0, 0, 'ai_suppressed', credName ?? null,
+      matched?.id ?? null, 'ai_skip', 0, 0, 'ai_suppressed', credName ?? null, body,
     );
     return;
   }
@@ -111,6 +111,14 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
   }
 
   const subs = queries.listSubs.all(user.sub) as import('./types.js').Subscription[];
+  const initialStatus = subs.length === 0 ? 'no_devices' : 'pending';
+  const insertResult = queries.insertEvent.run(
+    Date.now(), user.sub, from, recipient, subject,
+    matched?.id ?? null, matched?.action ?? null,
+    0, 0, initialStatus, credName ?? null, body,
+  );
+  const eventId = Number(insertResult.lastInsertRowid);
+
   let delivered = 0, failed = 0;
   await Promise.all(
     subs.map(async (s) => {
@@ -121,15 +129,12 @@ async function handleEmail(parsed: any, recipient: string, user: User, credName?
         priority,
         tag,
         ts: Date.now(),
+        eventId,
       });
       if (r.ok) delivered++; else failed++;
     }),
   );
 
-  const status = subs.length === 0 ? 'no_devices' : delivered > 0 ? 'delivered' : 'failed';
-  queries.insertEvent.run(
-    Date.now(), user.sub, from, recipient, subject,
-    matched?.id ?? null, matched?.action ?? null,
-    delivered, failed, status, credName ?? null,
-  );
+  const finalStatus = subs.length === 0 ? 'no_devices' : delivered > 0 ? 'delivered' : 'failed';
+  queries.updateEventCounts.run(delivered, failed, finalStatus, eventId);
 }

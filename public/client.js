@@ -242,7 +242,7 @@
         return;
       }
       const html = events.map(ev => `
-        <div class="row event status-${esc(ev.status)}">
+        <div class="row event status-${esc(ev.status)}" style="cursor:pointer" data-event-id="${ev.id}">
           <span class="ts">${esc(new Date(ev.ts).toLocaleString())}</span>
           <span class="from">${esc((ev.from_addr ?? '').slice(0, 32))}${ev.credential_name ? ' [' + esc(ev.credential_name) + ']' : ''}</span>
           <span class="subject">${esc((ev.subject ?? '').slice(0, 64))}</span>
@@ -254,6 +254,13 @@
         container.insertAdjacentHTML('afterbegin', html);
       }
       for (const ev of events) if (ev.id > lastEventId) lastEventId = ev.id;
+
+      container.querySelectorAll('[data-event-id]').forEach(row => {
+        row.addEventListener('click', () => {
+          const id = row.dataset.eventId;
+          if (id) window.location.href = '/event.html?id=' + id;
+        });
+      });
 
       // populate credential filter from visible events
       if (filterSelect && after === 0) {
@@ -511,7 +518,7 @@
   }
   const refreshUnmatched = document.getElementById('refresh-unmatched');
   if (refreshUnmatched) refreshUnmatched.addEventListener('click', loadUnmatchedEvents);
-})()();
+})();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function esc(s) {

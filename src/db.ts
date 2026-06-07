@@ -65,7 +65,8 @@ db.exec(`
     delivered_count INTEGER DEFAULT 0,
     failed_count    INTEGER DEFAULT 0,
     status          TEXT NOT NULL,
-    credential_name TEXT
+    credential_name TEXT,
+    body            TEXT
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -141,6 +142,16 @@ if (version < 3) {
   db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(3, Date.now());
 }
 
+if (version < 4) {
+  // Add body column to events for full message content display
+  try {
+    db.exec(`ALTER TABLE events ADD COLUMN body TEXT`);
+  } catch {
+    // column may already exist
+  }
+  db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(4, Date.now());
+}
+
 // ── Prepared Statements ───────────────────────────────────────────────────
 
 export const queries = {
@@ -182,9 +193,10 @@ export const queries = {
 
   // Events
   insertEvent: db.prepare(`
-    INSERT INTO events (ts, user_sub, from_addr, to_addr, subject, matched_rule, action_taken, delivered_count, failed_count, status, credential_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO events (ts, user_sub, from_addr, to_addr, subject, matched_rule, action_taken, delivered_count, failed_count, status, credential_name, body)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
+  getEventById: db.prepare('SELECT * FROM events WHERE id = ?'),
   listEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? AND id > ? ORDER BY ts DESC LIMIT ?'),
   listAllEvents: db.prepare('SELECT * FROM events WHERE user_sub = ? ORDER BY ts DESC LIMIT ?'),
   listEventsByCred: db.prepare("SELECT * FROM events WHERE user_sub = ? AND id > ? AND credential_name = ? ORDER BY ts DESC LIMIT ?"),
@@ -192,6 +204,7 @@ export const queries = {
   listUnmatchedEvents: db.prepare("SELECT * FROM events WHERE status = 'no_user' ORDER BY ts DESC LIMIT ?"),
   countEvents7d: db.prepare('SELECT COUNT(*) as c FROM events WHERE user_sub = ? AND ts > ?'),
   lastEventTs: db.prepare('SELECT MAX(ts) as ts FROM events WHERE user_sub = ?'),
+  updateEventCounts: db.prepare('UPDATE events SET delivered_count = ?, failed_count = ?, status = ? WHERE id = ?'),
 
   // Sessions
   createSession: db.prepare('INSERT INTO sessions (sid, user_sub, created_at, expires_at) VALUES (?, ?, ?, ?)'),
