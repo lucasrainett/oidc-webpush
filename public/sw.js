@@ -18,8 +18,13 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {}; }
   catch { data = { title: 'oidc-webpush', body: event.data ? event.data.text() : '' }; }
 
+  console.log('[SW] push payload keys:', Object.keys(data));
+  console.log('[SW] push payload publicId:', data.publicId);
+
   const title = data.title || 'oidc-webpush';
   const priority = data.priority || 3;
+  const url = data.publicId ? '/event.html?id=' + data.publicId : '/';
+  console.log('[SW] notification URL:', url);
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
@@ -28,13 +33,13 @@ self.addEventListener('push', (event) => {
     timestamp: data.ts || Date.now(),
     requireInteraction: priority >= 4,
     vibrate: priority >= 4 ? [200, 100, 200] : undefined,
-    data: { from: data.from, priority, url: data.publicId ? '/event.html?id=' + data.publicId : '/' },
+    data: { from: data.from, priority, url },
     actions: [
       { action: 'mute-type', title: 'Mute this' },
       { action: 'open', title: 'Open' },
     ],
   };
-  console.log('[SW] showing notification with actions:', options.actions);
+  console.log('[SW] showing notification');
   event.waitUntil(self.registration.showNotification(title, options));
 });
 

@@ -125,13 +125,19 @@
           const reg = await navigator.serviceWorker.ready;
           console.log('[PUSH] checking existing subscription...');
           let sub = await reg.pushManager.getSubscription();
+          console.log('[PUSH] getSubscription result:', sub ? 'exists' : 'null');
 
           if (!sub) {
             console.log('[PUSH] no existing subscription, subscribing...');
-            sub = await reg.pushManager.subscribe({
+            const subscribePromise = reg.pushManager.subscribe({
               userVisibleOnly: true,
               applicationServerKey: urlBase64ToUint8Array(vapidKey.trim()),
             });
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('subscribe timed out after 15s')), 15_000);
+            });
+            sub = await Promise.race([subscribePromise, timeoutPromise]);
+            console.log('[PUSH] subscribe returned');
           } else {
             console.log('[PUSH] existing subscription found, reusing for this user');
           }
